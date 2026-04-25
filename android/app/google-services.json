@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "512774131346",
+    "project_id": "lineas-unidas",
+    "storage_bucket": "lineas-unidas.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:512774131346:android:6774d09429aa74ab4ce04b",
+        "android_client_info": {
+          "package_name": "com.lineasunidas.lineas_unidas"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "512774131346-pn305f63q7egoipk64hr526jrc665ngs.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAlFYauQuVREEPzQlK4fXa16KUT3iro7E0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "512774131346-pn305f63q7egoipk64hr526jrc665ngs.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
