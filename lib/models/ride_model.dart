@@ -26,6 +26,7 @@ class RideModel {
   final DateTime? acceptedAt;
   final DateTime? completedAt;
   final List<String> rejectedDrivers;
+  final List<String> rejectedDriverNames;
 
   RideModel({
     required this.rideId,
@@ -44,6 +45,7 @@ class RideModel {
     this.acceptedAt,
     this.completedAt,
     this.rejectedDrivers = const [],
+    this.rejectedDriverNames = const [],
   });
 
   Map<String, dynamic> toMap() {
@@ -64,6 +66,7 @@ class RideModel {
       'acceptedAt': acceptedAt != null ? Timestamp.fromDate(acceptedAt!) : null,
       'completedAt': completedAt != null ? Timestamp.fromDate(completedAt!) : null,
       'rejectedDrivers': rejectedDrivers,
+      'rejectedDriverNames': rejectedDriverNames,
     };
   }
 
@@ -88,6 +91,7 @@ class RideModel {
       acceptedAt: (map['acceptedAt'] as Timestamp?)?.toDate(),
       completedAt: (map['completedAt'] as Timestamp?)?.toDate(),
       rejectedDrivers: List<String>.from(map['rejectedDrivers'] ?? []),
+      rejectedDriverNames: List<String>.from(map['rejectedDriverNames'] ?? []),
     );
   }
 
@@ -108,6 +112,7 @@ class RideModel {
     DateTime? acceptedAt,
     DateTime? completedAt,
     List<String>? rejectedDrivers,
+    List<String>? rejectedDriverNames,
   }) {
     return RideModel(
       rideId: rideId ?? this.rideId,
@@ -126,6 +131,7 @@ class RideModel {
       acceptedAt: acceptedAt ?? this.acceptedAt,
       completedAt: completedAt ?? this.completedAt,
       rejectedDrivers: rejectedDrivers ?? this.rejectedDrivers,
+      rejectedDriverNames: rejectedDriverNames ?? this.rejectedDriverNames,
     );
   }
 }

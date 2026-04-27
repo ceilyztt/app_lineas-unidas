@@ -67,9 +67,13 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
   void _clearRoute() {
     if (_routePoints.isNotEmpty) {
-      setState(() {
-        _routePoints = [];
-        _currentRideIdForRoute = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _routePoints = [];
+            _currentRideIdForRoute = null;
+          });
+        }
       });
     }
   }
@@ -258,6 +262,79 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           ),
           const SizedBox(height: 16),
 
+          // Solicitudes pendientes o Viaje Activo
+          Consumer<DriverProvider>(
+            builder: (context, driverProvider, _) {
+              if (driverProvider.driver?.isAvailable != true) {
+                _clearRoute();
+                return const SizedBox.shrink();
+              }
+
+              final uid = authProvider.firebaseUser!.uid;
+
+              // Primero: escuchar viajes activos
+              return StreamBuilder<List<RideModel>>(
+                stream: _firestoreService.streamDriverActiveRides(uid),
+                builder: (context, activeSnapshot) {
+                  final activeRides = activeSnapshot.data ?? [];
+
+                  if (activeRides.isNotEmpty) {
+                    final activeRide = activeRides.first;
+                    _loadRouteForRide(activeRide);
+
+                    return Container(
+                      padding: const EdgeInsets.all(16),
+                      color: AppTheme.backgroundColor,
+                      child: ActiveRideCard(ride: activeRide),
+                    );
+                  }
+
+                  // Segundo: si no hay viaje activo, escuchar pendientes
+                  return StreamBuilder<List<RideModel>>(
+                    stream: _firestoreService.streamPendingRideRequests(uid),
+                    builder: (context, pendingSnapshot) {
+                      if (!pendingSnapshot.hasData || pendingSnapshot.data!.isEmpty) {
+                        _clearRoute();
+                        return Container(
+                          padding: const EdgeInsets.all(16),
+                          child: const Text(
+                            'Esperando solicitudes...',
+                            style: TextStyle(color: AppTheme.textGrey),
+                            textAlign: TextAlign.center,
+                          ),
+                        );
+                      }
+
+                      final pendingRides = pendingSnapshot.data!;
+
+                      if (pendingRides.isEmpty) {
+                        _clearRoute();
+                        return Container(
+                          padding: const EdgeInsets.all(16),
+                          child: const Text(
+                            'Sin solicitudes pendientes',
+                            style: TextStyle(color: AppTheme.textGrey),
+                            textAlign: TextAlign.center,
+                          ),
+                        );
+                      }
+
+                      final pendingRide = pendingRides.first;
+                      _loadRouteForRide(pendingRide);
+
+                      return Container(
+                        padding: const EdgeInsets.all(16),
+                        color: AppTheme.backgroundColor,
+                        child: RideRequestCard(ride: pendingRide),
+                      );
+                    },
+                  );
+                },
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+
           // Mapa
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -336,78 +413,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               },
             ),
           ),
-          ),
-
-          // Solicitudes pendientes o Viaje Activo
-          Consumer<DriverProvider>(
-            builder: (context, driverProvider, _) {
-              if (driverProvider.driver?.isAvailable != true) {
-                _clearRoute();
-                return const SizedBox.shrink();
-              }
-
-              final uid = authProvider.firebaseUser!.uid;
-
-              // Primero: escuchar viajes activos
-              return StreamBuilder<List<RideModel>>(
-                stream: _firestoreService.streamDriverActiveRides(uid),
-                builder: (context, activeSnapshot) {
-                  final activeRides = activeSnapshot.data ?? [];
-
-                  if (activeRides.isNotEmpty) {
-                    final activeRide = activeRides.first;
-                    _loadRouteForRide(activeRide);
-
-                    return Container(
-                      padding: const EdgeInsets.all(16),
-                      color: AppTheme.backgroundColor,
-                      child: ActiveRideCard(ride: activeRide),
-                    );
-                  }
-
-                  // Segundo: si no hay viaje activo, escuchar pendientes
-                  return StreamBuilder<List<RideModel>>(
-                    stream: _firestoreService.streamPendingRideRequests(),
-                    builder: (context, pendingSnapshot) {
-                      if (!pendingSnapshot.hasData || pendingSnapshot.data!.isEmpty) {
-                        _clearRoute();
-                        return Container(
-                          padding: const EdgeInsets.all(16),
-                          child: const Text(
-                            'Esperando solicitudes...',
-                            style: TextStyle(color: AppTheme.textGrey),
-                            textAlign: TextAlign.center,
-                          ),
-                        );
-                      }
-
-                      final pendingRides = pendingSnapshot.data!.where((r) => r.driverId == uid).toList();
-
-                      if (pendingRides.isEmpty) {
-                        _clearRoute();
-                        return Container(
-                          padding: const EdgeInsets.all(16),
-                          child: const Text(
-                            'Sin solicitudes pendientes',
-                            style: TextStyle(color: AppTheme.textGrey),
-                            textAlign: TextAlign.center,
-                          ),
-                        );
-                      }
-
-                      final pendingRide = pendingRides.first;
-                      _loadRouteForRide(pendingRide);
-
-                      return Container(
-                        padding: const EdgeInsets.all(16),
-                        color: AppTheme.backgroundColor,
-                        child: RideRequestCard(ride: pendingRide),
-                      );
-                    },
-                  );
-                },
-              );
-            },
           ),
           const SizedBox(height: 20),
         ],
@@ -739,15 +744,37 @@ class ActiveRideCard extends StatelessWidget {
   const ActiveRideCard({super.key, required this.ride});
 
   Future<void> _openNavigation() async {
-    final lat = ride.pickupLocation.latitude;
-    final lng = ride.pickupLocation.longitude;
-    final wazeUrl = Uri.parse('https://waze.com/ul?ll=$lat,$lng&navigate=yes');
-    final mapsUrl = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$lat,$lng');
+    // Si el viaje está en progreso, navegamos al destino. De lo contrario, al punto de recogida.
+    final isGoingToDropoff = ride.status == RideStatus.inProgress && ride.dropoffLocation != null;
+    
+    final lat = isGoingToDropoff ? ride.dropoffLocation!.latitude : ride.pickupLocation.latitude;
+    final lng = isGoingToDropoff ? ride.dropoffLocation!.longitude : ride.pickupLocation.longitude;
 
-    if (await canLaunchUrl(wazeUrl)) {
-      await launchUrl(wazeUrl, mode: LaunchMode.externalApplication);
-    } else if (await canLaunchUrl(mapsUrl)) {
-      await launchUrl(mapsUrl, mode: LaunchMode.externalApplication);
+    // Intentar con esquemas de app directos y web como fallback
+    final wazeAppUrl = Uri.parse('waze://?ll=$lat,$lng&navigate=yes');
+    final mapsUrl = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$lat,$lng');
+    final wazeWebUrl = Uri.parse('https://waze.com/ul?ll=$lat,$lng&navigate=yes');
+
+    try {
+      // 1. Intenta abrir la app de Waze directamente
+      bool launched = await launchUrl(wazeAppUrl, mode: LaunchMode.externalApplication);
+      
+      // 2. Si no tiene Waze, intenta Google Maps
+      if (!launched) {
+        launched = await launchUrl(mapsUrl, mode: LaunchMode.externalApplication);
+      }
+      
+      // 3. Si tampoco tiene Google Maps (raro en Android), intenta Waze por la web
+      if (!launched) {
+        await launchUrl(wazeWebUrl, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      // Si falla cualquier esquema por políticas de Android 11+, forzamos el fallback a Maps URL
+      try {
+        await launchUrl(mapsUrl, mode: LaunchMode.externalApplication);
+      } catch (e2) {
+        debugPrint('No se pudo abrir ninguna app de navegación: $e2');
+      }
     }
   }
 

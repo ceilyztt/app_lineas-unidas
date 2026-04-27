@@ -187,22 +187,32 @@ class RideProvider extends ChangeNotifier {
   }
 
   Future<void> rejectRide(String rideId, String driverId) async {
-    // Agregar conductor a la lista de rechazados
-    final ride = _currentRide;
-    if (ride != null) {
-      final rejectedList = List<String>.from(ride.rejectedDrivers)
-        ..add(driverId);
+    // Obtenemos el viaje desde Firestore directamente, ya que _currentRide es null para el conductor
+    final doc = await FirebaseFirestore.instance.collection('rides').doc(rideId).get();
+    if (!doc.exists || doc.data() == null) return;
+    
+    final ride = RideModel.fromMap(doc.data()!);
 
-      await _firestoreService.updateRide(rideId, {
-        'driverId': null,
-        'driverName': null,
-        'rejectedDrivers': rejectedList,
-      });
+    // Obtener el nombre del conductor que rechazó para mostrarlo al pasajero
+    final driverDoc = await FirebaseFirestore.instance.collection('drivers').doc(driverId).get();
+    final driverName = driverDoc.exists ? (driverDoc.data()?['name'] ?? 'Un conductor') : 'Un conductor';
 
-      // Buscar siguiente conductor
-      final updatedRide = ride.copyWith(rejectedDrivers: rejectedList);
-      await _findNearestDriver(updatedRide);
-    }
+    final rejectedList = List<String>.from(ride.rejectedDrivers)..add(driverId);
+    final rejectedNamesList = List<String>.from(ride.rejectedDriverNames)..add(driverName);
+
+    await _firestoreService.updateRide(rideId, {
+      'driverId': null,
+      'driverName': null,
+      'rejectedDrivers': rejectedList,
+      'rejectedDriverNames': rejectedNamesList,
+    });
+
+    // Buscar siguiente conductor
+    final updatedRide = ride.copyWith(
+      rejectedDrivers: rejectedList,
+      rejectedDriverNames: rejectedNamesList,
+    );
+    await _findNearestDriver(updatedRide);
   }
 
   // ============ CONDUCTOR: Cambiar estado del viaje ============

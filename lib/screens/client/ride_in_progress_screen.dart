@@ -57,8 +57,17 @@ class _RideInProgressScreenState extends State<RideInProgressScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Consumer<RideProvider>(
+    return WillPopScope(
+      onWillPop: () async {
+        final rideProvider = Provider.of<RideProvider>(context, listen: false);
+        final ride = rideProvider.currentRide;
+        if (ride != null && (ride.status == RideStatus.requested || ride.status == RideStatus.accepted)) {
+          await rideProvider.cancelRide(ride.rideId);
+        }
+        return true;
+      },
+      child: Scaffold(
+        body: Consumer<RideProvider>(
         builder: (context, rideProvider, _) {
           final ride = rideProvider.currentRide;
 
@@ -234,11 +243,21 @@ class _RideInProgressScreenState extends State<RideInProgressScreen> {
 
                       if (ride.status == RideStatus.requested) ...[
                         const SizedBox(height: 16),
-                        const Text(
-                          'Buscando un conductor cercano...',
-                          style: TextStyle(color: AppTheme.textGrey),
-                          textAlign: TextAlign.center,
-                        ),
+                        if (ride.rejectedDriverNames.isNotEmpty)
+                          Text(
+                            'Rechazado por ${ride.rejectedDriverNames.last}...\nBuscando otro conductor cercano',
+                            style: const TextStyle(
+                                color: AppTheme.errorRed,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13),
+                            textAlign: TextAlign.center,
+                          )
+                        else
+                          const Text(
+                            'Buscando al conductor más cercano...',
+                            style: TextStyle(color: AppTheme.textGrey),
+                            textAlign: TextAlign.center,
+                          ),
                       ],
 
                       const SizedBox(height: 16),
@@ -271,6 +290,7 @@ class _RideInProgressScreenState extends State<RideInProgressScreen> {
           );
         },
       ),
+    ),
     );
   }
 

@@ -108,12 +108,12 @@ class FirestoreService {
             .toList());
   }
 
-  // Solicitudes pendientes para conductores (viajes solicitados sin conductor)
-  Stream<List<RideModel>> streamPendingRideRequests() {
+  // Solicitudes pendientes para conductores (viajes solicitados asignados a este conductor)
+  Stream<List<RideModel>> streamPendingRideRequests(String driverId) {
     return _firestore
         .collection('rides')
         .where('status', isEqualTo: 'requested')
-        .orderBy('createdAt', descending: true)
+        .where('driverId', isEqualTo: driverId)
         .snapshots()
         .map((snapshot) => snapshot.docs
             .map((doc) => RideModel.fromMap(doc.data()))
