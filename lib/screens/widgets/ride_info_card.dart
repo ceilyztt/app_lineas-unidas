@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../config/theme.dart';
+import 'package:provider/provider.dart';
+import '../../providers/currency_provider.dart';
 
 class RideInfoCard extends StatelessWidget {
   final String driverName;
@@ -185,13 +187,31 @@ class RideInfoCard extends StatelessWidget {
                       color: AppTheme.textGrey,
                     ),
                   ),
-                  Text(
-                    '\$${fare!.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      color: AppTheme.primaryColor,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  Consumer<CurrencyProvider>(
+                    builder: (context, currency, _) {
+                      final bsFare = currency.bcvRate > 0 ? (fare! * currency.bcvRate).toStringAsFixed(2) : null;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            '\$${fare!.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              color: AppTheme.primaryColor,
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          if (bsFare != null)
+                            Text(
+                              'Bs. $bsFare',
+                              style: const TextStyle(
+                                color: AppTheme.textGrey,
+                                fontSize: 13,
+                              ),
+                            ),
+                        ],
+                      );
+                    },
                   ),
                 ],
               ),

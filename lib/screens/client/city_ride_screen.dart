@@ -8,6 +8,7 @@ import '../../config/routes.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/location_provider.dart';
 import '../../providers/ride_provider.dart';
+import '../../providers/currency_provider.dart';
 
 class CityRideScreen extends StatefulWidget {
   const CityRideScreen({super.key});
@@ -669,13 +670,31 @@ class _CityRideScreenState extends State<CityRideScreen> {
                                                       ),
                                                     ),
                                                     const SizedBox(height: 2),
-                                                    Text(
-                                                      '\$${_estimatedFare!.toStringAsFixed(2)}',
-                                                      style: const TextStyle(
-                                                        color: AppTheme.primaryColor,
-                                                        fontWeight: FontWeight.bold,
-                                                        fontSize: 18,
-                                                      ),
+                                                    Consumer<CurrencyProvider>(
+                                                      builder: (context, currency, _) {
+                                                        final bsFare = currency.bcvRate > 0 ? (_estimatedFare! * currency.bcvRate).toStringAsFixed(2) : null;
+                                                        return Column(
+                                                          crossAxisAlignment: CrossAxisAlignment.end,
+                                                          children: [
+                                                            Text(
+                                                              '\$${_estimatedFare!.toStringAsFixed(2)}',
+                                                              style: const TextStyle(
+                                                                color: AppTheme.primaryColor,
+                                                                fontWeight: FontWeight.bold,
+                                                                fontSize: 18,
+                                                              ),
+                                                            ),
+                                                            if (bsFare != null)
+                                                              Text(
+                                                                'Bs. $bsFare',
+                                                                style: const TextStyle(
+                                                                  color: AppTheme.textGrey,
+                                                                  fontSize: 13,
+                                                                ),
+                                                              ),
+                                                          ],
+                                                        );
+                                                      },
                                                     ),
                                                   ],
                                                 ),

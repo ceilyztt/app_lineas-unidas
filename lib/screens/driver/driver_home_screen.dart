@@ -12,6 +12,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/driver_provider.dart';
 import '../../providers/location_provider.dart';
 import '../../providers/ride_provider.dart';
+import '../../providers/currency_provider.dart';
 import '../../models/ride_model.dart';
 import '../../services/firestore_service.dart';
 
@@ -489,21 +490,68 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          Text(
-            '¡Hola, ${authProvider.userModel?.name ?? 'Conductor'}! 🚕',
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.textWhite,
+          Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              '¡Hola, ${authProvider.userModel?.name ?? 'Conductor'}! 🚕',
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.textWhite,
+              ),
+              textAlign: TextAlign.right,
             ),
           ),
           const SizedBox(height: 6),
-          const Text(
-            '¿Listo para tu próximo servicio? Enciende tu radar y comienza a generar ingresos hoy mismo.',
-            style: TextStyle(
-              fontSize: 13,
-              color: AppTheme.textGrey,
-              height: 1.4,
+          const Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              '¿Listo para tu próximo servicio? Enciende tu radar y comienza a generar ingresos hoy mismo.',
+              style: TextStyle(
+                fontSize: 13,
+                color: AppTheme.textGrey,
+                height: 1.4,
+              ),
+              textAlign: TextAlign.right,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppTheme.successGreen.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.successGreen.withValues(alpha: 0.3)),
+              ),
+              child: Consumer<CurrencyProvider>(
+                builder: (context, currency, _) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      const Text(
+                        'BCV',
+                        style: TextStyle(
+                          color: AppTheme.textGrey,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        currency.bcvRate > 0 
+                          ? 'Bs. ${currency.bcvRate.toStringAsFixed(2)}' 
+                          : '...',
+                        style: const TextStyle(
+                          color: AppTheme.successGreen,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
             ),
           ),
         ],
@@ -685,15 +733,30 @@ class _RideRequestCardState extends State<RideRequestCard> {
                         ],
                       ),
                     if (ride.fare != null)
-                      Row(
-                        children: [
-                          const Icon(Icons.payments, color: AppTheme.successGreen, size: 18),
-                          const SizedBox(width: 4),
-                          Text(
-                            '\$${ride.fare!.toStringAsFixed(2)}',
-                            style: const TextStyle(color: AppTheme.successGreen, fontWeight: FontWeight.bold),
-                          ),
-                        ],
+                      Consumer<CurrencyProvider>(
+                        builder: (context, currency, _) {
+                          final bsFare = currency.bcvRate > 0 ? (ride.fare! * currency.bcvRate).toStringAsFixed(2) : null;
+                          return Row(
+                            children: [
+                              const Icon(Icons.payments, color: AppTheme.successGreen, size: 18),
+                              const SizedBox(width: 4),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '\$${ride.fare!.toStringAsFixed(2)}',
+                                    style: const TextStyle(color: AppTheme.successGreen, fontWeight: FontWeight.bold),
+                                  ),
+                                  if (bsFare != null)
+                                    Text(
+                                      'Bs. $bsFare',
+                                      style: const TextStyle(color: AppTheme.textGrey, fontSize: 12),
+                                    ),
+                                ],
+                              ),
+                            ],
+                          );
+                        },
                       ),
                   ],
                 ),

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../config/theme.dart';
 import '../../config/routes.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/currency_provider.dart';
 
 class ClientHomeScreen extends StatefulWidget {
   const ClientHomeScreen({super.key});
@@ -27,12 +28,17 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
+        type: BottomNavigationBarType.fixed,
         onTap: (index) {
           if (index == 1) {
-            Navigator.pushNamed(context, AppRoutes.rideHistory);
+            Navigator.pushNamed(context, AppRoutes.directory);
             return;
           }
           if (index == 2) {
+            Navigator.pushNamed(context, AppRoutes.rideHistory);
+            return;
+          }
+          if (index == 3) {
             Navigator.pushNamed(context, AppRoutes.clientProfile);
             return;
           }
@@ -42,6 +48,10 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.map),
             label: 'Mapa',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.people_alt_outlined),
+            label: 'Directorio',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.history),
@@ -130,20 +140,38 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                           ),
                           const Spacer(),
                           Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                             decoration: BoxDecoration(
-                              color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                              shape: BoxShape.circle,
+                              color: AppTheme.successGreen.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: AppTheme.successGreen.withValues(alpha: 0.3)),
                             ),
-                            child: IconButton(
-                              icon: const Icon(
-                                Icons.people_alt_outlined,
-                                color: AppTheme.primaryColor,
-                                size: 24,
-                              ),
-                              onPressed: () {
-                                Navigator.pushNamed(context, AppRoutes.directory);
+                            child: Consumer<CurrencyProvider>(
+                              builder: (context, currency, _) {
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    const Text(
+                                      'BCV',
+                                      style: TextStyle(
+                                        color: AppTheme.textGrey,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    Text(
+                                      currency.bcvRate > 0 
+                                        ? 'Bs. ${currency.bcvRate.toStringAsFixed(2)}' 
+                                        : '...',
+                                      style: const TextStyle(
+                                        color: AppTheme.successGreen,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ],
+                                );
                               },
-                              tooltip: 'Directorio de Conductores',
                             ),
                           ),
                         ],

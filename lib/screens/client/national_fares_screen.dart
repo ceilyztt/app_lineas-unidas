@@ -3,6 +3,8 @@ import '../../config/theme.dart';
 import '../../models/national_fare_model.dart';
 import '../../services/firestore_service.dart';
 import '../../utils/venezuela_data.dart';
+import 'package:provider/provider.dart';
+import '../../providers/currency_provider.dart';
 
 class NationalFaresScreen extends StatefulWidget {
   const NationalFaresScreen({super.key});
@@ -648,13 +650,32 @@ class _NationalFaresScreenState extends State<NationalFaresScreen> {
                                           .withValues(alpha: 0.15),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
-                                    child: Text(
-                                      '\$${fare.price.toStringAsFixed(0)}',
-                                      style: const TextStyle(
-                                        color: AppTheme.primaryColor,
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                    child: Consumer<CurrencyProvider>(
+                                      builder: (context, currency, _) {
+                                        final bsFare = currency.bcvRate > 0 ? (fare.price * currency.bcvRate).toStringAsFixed(2) : null;
+                                        return Column(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          crossAxisAlignment: CrossAxisAlignment.end,
+                                          children: [
+                                            Text(
+                                              '\$${fare.price.toStringAsFixed(0)}',
+                                              style: const TextStyle(
+                                                color: AppTheme.primaryColor,
+                                                fontSize: 20,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            if (bsFare != null)
+                                              Text(
+                                                'Bs. $bsFare',
+                                                style: const TextStyle(
+                                                  color: AppTheme.textGrey,
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                          ],
+                                        );
+                                      },
                                     ),
                                   ),
                                 ],
