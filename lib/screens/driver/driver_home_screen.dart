@@ -80,8 +80,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
-      body: Column(
-        children: [
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
           _buildDriverHeader(context, authProvider),
           // Toggle de disponibilidad
           Consumer<DriverProvider>(
@@ -258,14 +259,15 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           const SizedBox(height: 16),
 
           // Mapa
-          Expanded(
-            child: Consumer<LocationProvider>(
-              builder: (context, locationProvider, _) {
-                if (locationProvider.currentPosition != null) {
-                  return ClipRRect(
-                    borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(16),
-                    ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: SizedBox(
+              height: 300, // Altura reducida para que sea más pequeño
+              child: Consumer<LocationProvider>(
+                builder: (context, locationProvider, _) {
+                  if (locationProvider.currentPosition != null) {
+                    return ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
                     child: FlutterMap(
                       options: MapOptions(
                         initialCenter: LatLng(
@@ -333,6 +335,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 );
               },
             ),
+          ),
           ),
 
           // Solicitudes pendientes o Viaje Activo
@@ -406,7 +409,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               );
             },
           ),
+          const SizedBox(height: 20),
         ],
+        ),
       ),
     );
   }
