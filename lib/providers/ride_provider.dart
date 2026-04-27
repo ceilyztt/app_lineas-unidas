@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:latlong2/latlong.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
@@ -32,6 +33,10 @@ class RideProvider extends ChangeNotifier {
     required String clientName,
     required Position pickupPosition,
     required String pickupAddress,
+    LatLng? dropoffPosition,
+    String? dropoffAddress,
+    double? fare,
+    double? distance,
   }) async {
     _isLoading = true;
     _error = null;
@@ -50,6 +55,12 @@ class RideProvider extends ChangeNotifier {
           pickupPosition.longitude,
         ),
         pickupAddress: pickupAddress,
+        dropoffLocation: dropoffPosition != null
+            ? GeoPoint(dropoffPosition.latitude, dropoffPosition.longitude)
+            : null,
+        dropoffAddress: dropoffAddress,
+        fare: fare,
+        distance: distance,
         createdAt: DateTime.now(),
       );
 
@@ -57,7 +68,13 @@ class RideProvider extends ChangeNotifier {
       _currentRide = ride;
 
       // Buscar conductor más cercano
-      await _findNearestDriver(ride);
+      final driverFound = await _findNearestDriver(ride);
+
+      if (!driverFound) {
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
 
       // Escuchar cambios en el viaje
       _listenToRide(rideId);
@@ -74,16 +91,16 @@ class RideProvider extends ChangeNotifier {
   }
 
   // Buscar el conductor disponible más cercano
-  Future<void> _findNearestDriver(RideModel ride) async {
+  Future<bool> _findNearestDriver(RideModel ride) async {
     final drivers = await _firestoreService.getAvailableDrivers();
 
     if (drivers.isEmpty) {
-      _error = 'No hay conductores disponibles en este momento.';
+      _error = 'Lo sentimos, no hay conductores disponibles en este momento.';
       await _firestoreService.updateRide(ride.rideId, {
         'status': RideStatus.cancelled.name,
       });
       notifyListeners();
-      return;
+      return false;
     }
 
     // Filtrar conductores que ya rechazaron
@@ -98,7 +115,7 @@ class RideProvider extends ChangeNotifier {
         'status': RideStatus.cancelled.name,
       });
       notifyListeners();
-      return;
+      return false;
     }
 
     // Calcular distancias y encontrar el más cercano
@@ -134,7 +151,11 @@ class RideProvider extends ChangeNotifier {
         body: '${ride.clientName} necesita un taxi en ${ride.pickupAddress}',
         payload: ride.rideId,
       );
+      return true;
     }
+    
+    _error = 'No pudimos asignar un conductor a tu viaje.';
+    return false;
   }
 
   // Escuchar cambios en el viaje

@@ -1,6 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import 'package:provider/provider.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../services/routing_service.dart';
 import '../../config/theme.dart';
 import '../../config/routes.dart';
 import '../../providers/auth_provider.dart';
@@ -19,6 +24,8 @@ class DriverHomeScreen extends StatefulWidget {
 
 class _DriverHomeScreenState extends State<DriverHomeScreen> {
   final FirestoreService _firestoreService = FirestoreService();
+  List<LatLng> _routePoints = [];
+  String? _currentRideIdForRoute;
 
   @override
   void initState() {
@@ -37,6 +44,33 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     if (authProvider.firebaseUser != null) {
       driverProvider.loadDriver(authProvider.firebaseUser!.uid);
       locationProvider.getCurrentLocation();
+    }
+  }
+
+  void _loadRouteForRide(RideModel ride) async {
+    if (_currentRideIdForRoute == ride.rideId || ride.dropoffLocation == null) {
+      return;
+    }
+    _currentRideIdForRoute = ride.rideId;
+    
+    final result = await RoutingService.getRoute(
+      LatLng(ride.pickupLocation.latitude, ride.pickupLocation.longitude),
+      LatLng(ride.dropoffLocation!.latitude, ride.dropoffLocation!.longitude),
+    );
+    
+    if (result != null && mounted) {
+      setState(() {
+        _routePoints = result.points;
+      });
+    }
+  }
+
+  void _clearRoute() {
+    if (_routePoints.isNotEmpty) {
+      setState(() {
+        _routePoints = [];
+        _currentRideIdForRoute = null;
+      });
     }
   }
 
@@ -232,16 +266,53 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                     borderRadius: const BorderRadius.vertical(
                       top: Radius.circular(16),
                     ),
-                    child: GoogleMap(
-                      initialCameraPosition: CameraPosition(
-                        target: LatLng(
+                    child: FlutterMap(
+                      options: MapOptions(
+                        initialCenter: LatLng(
                           locationProvider.currentPosition!.latitude,
                           locationProvider.currentPosition!.longitude,
                         ),
-                        zoom: 15,
+                        initialZoom: 15.0,
                       ),
-                      myLocationEnabled: true,
-                      myLocationButtonEnabled: true,
+                      children: [
+                        TileLayer(
+                          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                          userAgentPackageName: 'com.lineasunidas.app',
+                        ),
+                        if (_routePoints.isNotEmpty)
+                          PolylineLayer(
+                            polylines: [
+                              Polyline(
+                                points: _routePoints,
+                                strokeWidth: 4.0,
+                                color: AppTheme.primaryColor,
+                              ),
+                            ],
+                          ),
+                        MarkerLayer(
+                          markers: [
+                            Marker(
+                              point: LatLng(
+                                locationProvider.currentPosition!.latitude,
+                                locationProvider.currentPosition!.longitude,
+                              ),
+                              width: 40,
+                              height: 40,
+                              child: Container(
+                                decoration: const BoxDecoration(
+                                  color: AppTheme.surfaceColor,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.local_taxi,
+                                  color: AppTheme.primaryColor,
+                                  size: 24,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   );
                 }
@@ -264,47 +335,72 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             ),
           ),
 
-          // Solicitudes pendientes
+          // Solicitudes pendientes o Viaje Activo
           Consumer<DriverProvider>(
             builder: (context, driverProvider, _) {
               if (driverProvider.driver?.isAvailable != true) {
+                _clearRoute();
                 return const SizedBox.shrink();
               }
 
+              final uid = authProvider.firebaseUser!.uid;
+
+              // Primero: escuchar viajes activos
               return StreamBuilder<List<RideModel>>(
-                stream: _firestoreService.streamPendingRideRequests(),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                stream: _firestoreService.streamDriverActiveRides(uid),
+                builder: (context, activeSnapshot) {
+                  final activeRides = activeSnapshot.data ?? [];
+
+                  if (activeRides.isNotEmpty) {
+                    final activeRide = activeRides.first;
+                    _loadRouteForRide(activeRide);
+
                     return Container(
                       padding: const EdgeInsets.all(16),
-                      child: const Text(
-                        'Esperando solicitudes...',
-                        style: TextStyle(color: AppTheme.textGrey),
-                        textAlign: TextAlign.center,
-                      ),
+                      color: AppTheme.backgroundColor,
+                      child: ActiveRideCard(ride: activeRide),
                     );
                   }
 
-                  final rides = snapshot.data!.where((ride) =>
-                      ride.driverId == authProvider.firebaseUser?.uid);
+                  // Segundo: si no hay viaje activo, escuchar pendientes
+                  return StreamBuilder<List<RideModel>>(
+                    stream: _firestoreService.streamPendingRideRequests(),
+                    builder: (context, pendingSnapshot) {
+                      if (!pendingSnapshot.hasData || pendingSnapshot.data!.isEmpty) {
+                        _clearRoute();
+                        return Container(
+                          padding: const EdgeInsets.all(16),
+                          child: const Text(
+                            'Esperando solicitudes...',
+                            style: TextStyle(color: AppTheme.textGrey),
+                            textAlign: TextAlign.center,
+                          ),
+                        );
+                      }
 
-                  if (rides.isEmpty) {
-                    return Container(
-                      padding: const EdgeInsets.all(16),
-                      child: const Text(
-                        'Sin solicitudes pendientes',
-                        style: TextStyle(color: AppTheme.textGrey),
-                        textAlign: TextAlign.center,
-                      ),
-                    );
-                  }
+                      final pendingRides = pendingSnapshot.data!.where((r) => r.driverId == uid).toList();
 
-                  return Container(
-                    padding: const EdgeInsets.all(16),
-                    color: AppTheme.backgroundColor,
-                    child: Column(
-                      children: rides.map((ride) => _buildRideRequest(ride)).toList(),
-                    ),
+                      if (pendingRides.isEmpty) {
+                        _clearRoute();
+                        return Container(
+                          padding: const EdgeInsets.all(16),
+                          child: const Text(
+                            'Sin solicitudes pendientes',
+                            style: TextStyle(color: AppTheme.textGrey),
+                            textAlign: TextAlign.center,
+                          ),
+                        );
+                      }
+
+                      final pendingRide = pendingRides.first;
+                      _loadRouteForRide(pendingRide);
+
+                      return Container(
+                        padding: const EdgeInsets.all(16),
+                        color: AppTheme.backgroundColor,
+                        child: RideRequestCard(ride: pendingRide),
+                      );
+                    },
                   );
                 },
               );
@@ -405,7 +501,72 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     );
   }
 
-  Widget _buildRideRequest(RideModel ride) {
+}
+
+class RideRequestCard extends StatefulWidget {
+  final RideModel ride;
+
+  const RideRequestCard({super.key, required this.ride});
+
+  @override
+  State<RideRequestCard> createState() => _RideRequestCardState();
+}
+
+class _RideRequestCardState extends State<RideRequestCard> {
+  int _timeLeft = 15;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startTimer();
+    FlutterRingtonePlayer().playAlarm(looping: true, volume: 1.0, asAlarm: true);
+  }
+
+  void _stopSound() {
+    try {
+      FlutterRingtonePlayer().stop();
+    } catch (_) {}
+  }
+
+  void _startTimer() {
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(() {
+        if (_timeLeft > 0) {
+          _timeLeft--;
+        } else {
+          timer.cancel();
+          _autoReject();
+        }
+      });
+    });
+  }
+
+  void _autoReject() {
+    _stopSound();
+    final rideProvider = Provider.of<RideProvider>(context, listen: false);
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    rideProvider.rejectRide(
+      widget.ride.rideId,
+      authProvider.firebaseUser!.uid,
+    );
+  }
+
+  @override
+  void dispose() {
+    _stopSound();
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ride = widget.ride;
+    
     return Card(
       color: AppTheme.primaryColor.withValues(alpha: 0.1),
       child: Padding(
@@ -414,19 +575,47 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Icon(
-                  Icons.notification_important,
-                  color: AppTheme.primaryColor,
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.notification_important,
+                      color: AppTheme.primaryColor,
+                    ),
+                    const SizedBox(width: 8),
+                    const Text(
+                      '¡Nueva solicitud!',
+                      style: TextStyle(
+                        color: AppTheme.primaryColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                const Text(
-                  '¡Nueva solicitud!',
-                  style: TextStyle(
-                    color: AppTheme.primaryColor,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    SizedBox(
+                      width: 50,
+                      height: 50,
+                      child: CircularProgressIndicator(
+                        value: _timeLeft / 15,
+                        backgroundColor: AppTheme.backgroundColor,
+                        color: _timeLeft <= 5 ? AppTheme.errorRed : AppTheme.primaryColor,
+                        strokeWidth: 5,
+                      ),
+                    ),
+                    Text(
+                      '${_timeLeft}s',
+                      style: TextStyle(
+                        color: _timeLeft <= 5 ? AppTheme.errorRed : AppTheme.textWhite,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -435,25 +624,77 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               'Cliente: ${ride.clientName}',
               style: const TextStyle(color: AppTheme.textWhite),
             ),
-            Text(
-              'Ubicación: ${ride.pickupAddress}',
-              style: const TextStyle(color: AppTheme.textGrey, fontSize: 13),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(Icons.my_location, color: AppTheme.successGreen, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    ride.pickupAddress,
+                    style: const TextStyle(color: AppTheme.textGrey, fontSize: 13),
+                  ),
+                ),
+              ],
             ),
+            if (ride.dropoffAddress != null) ...[
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  const Icon(Icons.location_on, color: AppTheme.errorRed, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      ride.dropoffAddress!,
+                      style: const TextStyle(color: AppTheme.textGrey, fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            if (ride.distance != null || ride.fare != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppTheme.backgroundColor,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    if (ride.distance != null)
+                      Row(
+                        children: [
+                          const Icon(Icons.route, color: AppTheme.primaryColor, size: 18),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${ride.distance!.toStringAsFixed(1)} km',
+                            style: const TextStyle(color: AppTheme.textWhite, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    if (ride.fare != null)
+                      Row(
+                        children: [
+                          const Icon(Icons.payments, color: AppTheme.successGreen, size: 18),
+                          const SizedBox(width: 4),
+                          Text(
+                            '\$${ride.fare!.toStringAsFixed(2)}',
+                            style: const TextStyle(color: AppTheme.successGreen, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () {
-                      final rideProvider =
-                          Provider.of<RideProvider>(context, listen: false);
-                      final authProvider =
-                          Provider.of<AuthProvider>(context, listen: false);
-                      rideProvider.rejectRide(
-                        ride.rideId,
-                        authProvider.firebaseUser!.uid,
-                      );
-                    },
+                    onPressed: _autoReject,
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppTheme.errorRed,
                       side: const BorderSide(color: AppTheme.errorRed),
@@ -465,6 +706,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () {
+                      _stopSound();
                       final rideProvider =
                           Provider.of<RideProvider>(context, listen: false);
                       final authProvider =
@@ -479,6 +721,147 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 ),
               ],
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class ActiveRideCard extends StatelessWidget {
+  final RideModel ride;
+
+  const ActiveRideCard({super.key, required this.ride});
+
+  Future<void> _openNavigation() async {
+    final lat = ride.pickupLocation.latitude;
+    final lng = ride.pickupLocation.longitude;
+    final wazeUrl = Uri.parse('https://waze.com/ul?ll=$lat,$lng&navigate=yes');
+    final mapsUrl = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$lat,$lng');
+
+    if (await canLaunchUrl(wazeUrl)) {
+      await launchUrl(wazeUrl, mode: LaunchMode.externalApplication);
+    } else if (await canLaunchUrl(mapsUrl)) {
+      await launchUrl(mapsUrl, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rideProvider = Provider.of<RideProvider>(context, listen: false);
+    
+    String statusText = '';
+    Color statusColor = AppTheme.primaryColor;
+    
+    if (ride.status == RideStatus.accepted) {
+      statusText = 'VIAJE ACEPTADO';
+      statusColor = AppTheme.successGreen;
+    } else if (ride.status == RideStatus.driverOnWay) {
+      statusText = 'EN CAMINO';
+      statusColor = Colors.orangeAccent;
+    } else if (ride.status == RideStatus.inProgress) {
+      statusText = 'VIAJE EN PROGRESO';
+      statusColor = AppTheme.primaryColor;
+    }
+
+    return Card(
+      color: statusColor.withValues(alpha: 0.1),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: statusColor.withValues(alpha: 0.5)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.directions_car, color: statusColor),
+                const SizedBox(width: 8),
+                Text(
+                  statusText,
+                  style: TextStyle(
+                    color: statusColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Cliente: ${ride.clientName}',
+              style: const TextStyle(color: AppTheme.textWhite, fontSize: 16),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(Icons.my_location, color: AppTheme.successGreen, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    ride.pickupAddress,
+                    style: const TextStyle(color: AppTheme.textGrey, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+            if (ride.dropoffAddress != null) ...[
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  const Icon(Icons.location_on, color: AppTheme.errorRed, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      ride.dropoffAddress!,
+                      style: const TextStyle(color: AppTheme.textGrey, fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.navigation),
+                label: const Text('NAVEGAR (WAZE / MAPS)'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.surfaceColor,
+                  foregroundColor: AppTheme.primaryColor,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                onPressed: _openNavigation,
+              ),
+            ),
+            const SizedBox(height: 12),
+            if (ride.status == RideStatus.accepted)
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => rideProvider.startPickup(ride.rideId),
+                  child: const Text('VOY EN CAMINO'),
+                ),
+              ),
+            if (ride.status == RideStatus.driverOnWay)
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => rideProvider.startTrip(ride.rideId),
+                  child: const Text('INICIAR VIAJE (PASAJERO A BORDO)'),
+                ),
+              ),
+            if (ride.status == RideStatus.inProgress)
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.successGreen),
+                  onPressed: () => rideProvider.completeTrip(ride.rideId, ride.distance ?? 0.0),
+                  child: const Text('FINALIZAR VIAJE'),
+                ),
+              ),
           ],
         ),
       ),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import '../../services/routing_service.dart';
 import '../../config/theme.dart';
 import '../../config/routes.dart';
 import '../../providers/ride_provider.dart';
@@ -16,6 +18,9 @@ class RideInProgressScreen extends StatefulWidget {
 }
 
 class _RideInProgressScreenState extends State<RideInProgressScreen> {
+  List<LatLng> _routePoints = [];
+  bool _isLoadingRoute = false;
+  String? _lastDriverId;
   String _getStatusMessage(RideStatus status) {
     switch (status) {
       case RideStatus.requested:
@@ -66,6 +71,18 @@ class _RideInProgressScreenState extends State<RideInProgressScreen> {
             );
           }
 
+          // Cargar ruta si hay conductor asignado y aún no se ha cargado
+          final driver = rideProvider.assignedDriver;
+          if (driver != null && driver.location != null && ride.status == RideStatus.driverOnWay) {
+            if (_lastDriverId != driver.uid) {
+              _lastDriverId = driver.uid;
+              _loadRoute(
+                LatLng(driver.location!.latitude, driver.location!.longitude),
+                LatLng(ride.pickupLocation.latitude, ride.pickupLocation.longitude),
+              );
+            }
+          }
+
           // Si el viaje se completó, ir a calificación
           if (ride.status == RideStatus.completed) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -83,17 +100,33 @@ class _RideInProgressScreenState extends State<RideInProgressScreen> {
               Consumer<LocationProvider>(
                 builder: (context, locationProvider, _) {
                   if (locationProvider.currentPosition != null) {
-                    return GoogleMap(
-                      initialCameraPosition: CameraPosition(
-                        target: LatLng(
+                    return FlutterMap(
+                      options: MapOptions(
+                        initialCenter: LatLng(
                           ride.pickupLocation.latitude,
                           ride.pickupLocation.longitude,
                         ),
-                        zoom: 15,
+                        initialZoom: 15.0,
                       ),
-                      myLocationEnabled: true,
-                      myLocationButtonEnabled: false,
-                      markers: _buildMarkers(ride),
+                      children: [
+                        TileLayer(
+                          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                          userAgentPackageName: 'com.lineasunidas.app',
+                        ),
+                        if (_routePoints.isNotEmpty)
+                          PolylineLayer(
+                            polylines: [
+                              Polyline(
+                                points: _routePoints,
+                                strokeWidth: 4.0,
+                                color: AppTheme.primaryColor,
+                              ),
+                            ],
+                          ),
+                        MarkerLayer(
+                          markers: _buildMarkers(ride, rideProvider),
+                        ),
+                      ],
                     );
                   }
                   return const Center(
@@ -241,21 +274,67 @@ class _RideInProgressScreenState extends State<RideInProgressScreen> {
     );
   }
 
-  Set<Marker> _buildMarkers(RideModel ride) {
-    final markers = <Marker>{};
+  Future<void> _loadRoute(LatLng start, LatLng end) async {
+    if (_isLoadingRoute) return;
+    if (mounted) {
+      setState(() => _isLoadingRoute = true);
+    }
+    
+    final result = await RoutingService.getRoute(start, end);
+    
+    if (mounted) {
+      setState(() {
+        _routePoints = result?.points ?? [];
+        _isLoadingRoute = false;
+      });
+    }
+  }
+
+  List<Marker> _buildMarkers(RideModel ride, RideProvider rideProvider) {
+    final markers = <Marker>[];
 
     // Marcador de recogida
     markers.add(
       Marker(
-        markerId: const MarkerId('pickup'),
-        position: LatLng(
+        point: LatLng(
           ride.pickupLocation.latitude,
           ride.pickupLocation.longitude,
         ),
-        infoWindow: InfoWindow(title: 'Punto de recogida'),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+        width: 40,
+        height: 40,
+        child: const Icon(
+          Icons.person_pin_circle,
+          color: AppTheme.successGreen,
+          size: 40,
+        ),
       ),
     );
+
+    // Marcador del conductor (si está asignado y tiene ubicación)
+    final driver = rideProvider.assignedDriver;
+    if (driver != null && driver.location != null) {
+      markers.add(
+        Marker(
+          point: LatLng(
+            driver.location!.latitude,
+            driver.location!.longitude,
+          ),
+          width: 40,
+          height: 40,
+          child: Container(
+            decoration: const BoxDecoration(
+              color: AppTheme.surfaceColor,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.local_taxi,
+              color: AppTheme.primaryColor,
+              size: 24,
+            ),
+          ),
+        ),
+      );
+    }
 
     return markers;
   }
