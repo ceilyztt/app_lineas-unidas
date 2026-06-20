@@ -4,14 +4,19 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../config/theme.dart';
 import '../../config/routes.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/firestore_service.dart';
+import '../../models/sos_alert_model.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class AdminHomeScreen extends StatelessWidget {
   const AdminHomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.backgroundColor,
+    return Stack(
+      children: [
+        Scaffold(
+          backgroundColor: AppTheme.backgroundColor,
       body: Column(
         children: [
           _buildAdminHeader(context),
@@ -81,6 +86,85 @@ class AdminHomeScreen extends StatelessWidget {
           ),
         ],
       ),
+    ),
+        
+    // Capa Superior: Escucha de Alertas de Emergencia (SOS)
+        StreamBuilder<List<SosAlertModel>>(
+          stream: FirestoreService().streamActiveSosAlerts(),
+          builder: (context, snapshot) {
+            final activeAlerts = snapshot.data ?? [];
+            if (activeAlerts.isEmpty) return const SizedBox.shrink();
+
+            final alert = activeAlerts.first;
+
+            return Material(
+              color: Colors.red.withOpacity(0.95),
+              child: SafeArea(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.warning_rounded, color: Colors.white, size: 100),
+                        const SizedBox(height: 16),
+                        const Text(
+                          '¡EMERGENCIA SOS!',
+                          style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w900, letterSpacing: 2),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 24),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+                          child: Column(
+                            children: [
+                              Text('Usuario en Peligro: ${alert.userName}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black)),
+                              Text('Teléfono: ${alert.userPhone}', style: const TextStyle(fontSize: 16, color: Colors.black87)),
+                              Text('Rol: ${alert.role == "driver" ? "Conductor" : "Pasajero"}', style: const TextStyle(fontSize: 16, color: Colors.black54)),
+                              const SizedBox(height: 16),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                children: [
+                                  ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                                    icon: const Icon(Icons.call, color: Colors.white),
+                                    label: const Text('Llamar', style: TextStyle(color: Colors.white)),
+                                    onPressed: () => launchUrl(Uri.parse("tel://${alert.userPhone}")),
+                                  ),
+                                  ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+                                    icon: const Icon(Icons.map, color: Colors.white),
+                                    label: const Text('Ver Mapa', style: TextStyle(color: Colors.white)),
+                                    onPressed: () {
+                                      final url = 'https://www.google.com/maps/search/?api=1&query=${alert.location.latitude},${alert.location.longitude}';
+                                      launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+                                    },
+                                  ),
+                                ],
+                              )
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 40),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 60,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
+                            onPressed: () => FirestoreService().resolveSosAlert(alert.alertId),
+                            child: const Text('MARCAR COMO RESUELTA', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 
@@ -205,9 +289,9 @@ class AdminHomeScreen extends StatelessWidget {
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     children: [
-                      _buildFotoCard("Frontal", data['vehiclePhotoFrontUrl']),
-                      _buildFotoCard("Trasera", data['vehiclePhotoBackUrl']),
-                      _buildFotoCard("Interior", data['vehiclePhotoInteriorUrl']),
+                      _buildFotoCard(context, "Frontal", data['vehiclePhotoFrontUrl']),
+                      _buildFotoCard(context, "Trasera", data['vehiclePhotoBackUrl']),
+                      _buildFotoCard(context, "Interior", data['vehiclePhotoInteriorUrl']),
                     ],
                   ),
                 ),
@@ -272,33 +356,61 @@ class AdminHomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildFotoCard(String titulo, String? url) {
+  Widget _buildFotoCard(BuildContext context, String titulo, String? url) {
     return Padding(
       padding: const EdgeInsets.only(right: 10),
       child: Column(
         children: [
           Text(titulo, style: const TextStyle(fontSize: 10, color: AppTheme.textWhite)),
           const SizedBox(height: 4),
-          Container(
-            width: 130, height: 90,
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceColor, borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.3)),
+          GestureDetector(
+            onTap: () {
+              if (url != null && url.isNotEmpty) {
+                _mostrarImagenGrande(context, url);
+              }
+            },
+            child: Container(
+              width: 130, height: 90,
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceColor, borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.3)),
+              ),
+              child: (url != null && url.isNotEmpty)
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(url, fit: BoxFit.cover,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return const Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryColor));
+                        },
+                        errorBuilder: (context, error, stack) => const Icon(Icons.broken_image, color: AppTheme.errorRed),
+                      ),
+                    )
+                  : const Icon(Icons.no_photography, color: AppTheme.textGrey),
             ),
-            child: (url != null && url.isNotEmpty)
-                ? ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.network(url, fit: BoxFit.cover,
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return const Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryColor));
-                      },
-                      errorBuilder: (context, error, stack) => const Icon(Icons.broken_image, color: AppTheme.errorRed),
-                    ),
-                  )
-                : const Icon(Icons.no_photography, color: AppTheme.textGrey),
           ),
         ],
+      ),
+    );
+  }
+
+  void _mostrarImagenGrande(BuildContext context, String url) {
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            InteractiveViewer(
+              child: Image.network(url, fit: BoxFit.contain),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, color: Colors.white, size: 30),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
       ),
     );
   }

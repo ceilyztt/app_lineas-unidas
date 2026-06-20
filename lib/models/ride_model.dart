@@ -27,6 +27,9 @@ class RideModel {
   final DateTime? completedAt;
   final List<String> rejectedDrivers;
   final List<String> rejectedDriverNames;
+  final String? paymentMethod;
+  final String? paymentStatus;
+  final Map<String, dynamic>? paymentDetails;
 
   RideModel({
     required this.rideId,
@@ -46,6 +49,9 @@ class RideModel {
     this.completedAt,
     this.rejectedDrivers = const [],
     this.rejectedDriverNames = const [],
+    this.paymentMethod,
+    this.paymentStatus,
+    this.paymentDetails,
   });
 
   Map<String, dynamic> toMap() {
@@ -67,6 +73,9 @@ class RideModel {
       'completedAt': completedAt != null ? Timestamp.fromDate(completedAt!) : null,
       'rejectedDrivers': rejectedDrivers,
       'rejectedDriverNames': rejectedDriverNames,
+      'paymentMethod': paymentMethod,
+      'paymentStatus': paymentStatus,
+      'paymentDetails': paymentDetails,
     };
   }
 
@@ -92,6 +101,9 @@ class RideModel {
       completedAt: (map['completedAt'] as Timestamp?)?.toDate(),
       rejectedDrivers: List<String>.from(map['rejectedDrivers'] ?? []),
       rejectedDriverNames: List<String>.from(map['rejectedDriverNames'] ?? []),
+      paymentMethod: map['paymentMethod'],
+      paymentStatus: map['paymentStatus'],
+      paymentDetails: map['paymentDetails'] != null ? Map<String, dynamic>.from(map['paymentDetails']) : null,
     );
   }
 
@@ -113,6 +125,9 @@ class RideModel {
     DateTime? completedAt,
     List<String>? rejectedDrivers,
     List<String>? rejectedDriverNames,
+    String? paymentMethod,
+    String? paymentStatus,
+    Map<String, dynamic>? paymentDetails,
   }) {
     return RideModel(
       rideId: rideId ?? this.rideId,
@@ -132,6 +147,9 @@ class RideModel {
       completedAt: completedAt ?? this.completedAt,
       rejectedDrivers: rejectedDrivers ?? this.rejectedDrivers,
       rejectedDriverNames: rejectedDriverNames ?? this.rejectedDriverNames,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
+      paymentStatus: paymentStatus ?? this.paymentStatus,
+      paymentDetails: paymentDetails ?? this.paymentDetails,
     );
   }
 }

@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
 import '../models/ride_model.dart';
 import '../models/driver_model.dart';
+import '../models/message_model.dart';
 import '../services/firestore_service.dart';
 import '../services/location_service.dart';
 import '../services/notification_service.dart';
@@ -19,6 +20,9 @@ class RideProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _error;
   StreamSubscription? _rideSubscription;
+  StreamSubscription? _messagesSubscription;
+  List<MessageModel> _previousMessages = [];
+  bool _isFirstMessagesLoad = true;
 
   RideModel? get currentRide => _currentRide;
   DriverModel? get assignedDriver => _assignedDriver;
@@ -144,13 +148,6 @@ class RideProvider extends ChangeNotifier {
       });
 
       _assignedDriver = nearestDriver;
-
-      // Notificar al conductor
-      _notificationService.showLocalNotification(
-        title: '¡Nueva solicitud de viaje!',
-        body: '${ride.clientName} necesita un taxi en ${ride.pickupAddress}',
-        payload: ride.rideId,
-      );
       return true;
     }
     
@@ -158,15 +155,114 @@ class RideProvider extends ChangeNotifier {
     return false;
   }
 
+  Timer? _driverRequestTimer;
+
   // Escuchar cambios en el viaje
   void _listenToRide(String rideId) {
     _rideSubscription?.cancel();
     _rideSubscription = _firestoreService.streamRide(rideId).listen((ride) {
       if (ride != null) {
+        // Detectar cambios de estado para notificar al pasajero
+        if (_currentRide != null && _currentRide!.status != ride.status) {
+          _notifyPassengerOfStatusChange(ride);
+        }
+        
+        // --- INICIO LÓGICA DE TIMEOUT ---
+        _driverRequestTimer?.cancel();
+        
+        // Si el viaje está 'requested' y tiene un driver asignado, iniciamos timer de 20s.
+        // Esto ocurrirá cada vez que Firestore se actualice (ej: al asignar un nuevo conductor).
+        if (ride.status == RideStatus.requested && ride.driverId != null) {
+          final assignedDriverId = ride.driverId!;
+          _driverRequestTimer = Timer(const Duration(seconds: 20), () async {
+            // Verificamos si sigue en 'requested' con el mismo conductor
+            if (_currentRide != null && 
+                _currentRide!.status == RideStatus.requested && 
+                _currentRide!.driverId == assignedDriverId) {
+              await rejectRide(ride.rideId, assignedDriverId);
+            }
+          });
+        }
+        // --- FIN LÓGICA DE TIMEOUT ---
+
+        // Si no estábamos escuchando los mensajes de este viaje, empezar a hacerlo
+        if (_currentRide == null || _currentRide!.rideId != ride.rideId) {
+          _listenToMessages(ride.rideId, ride.clientId);
+        }
+
         _currentRide = ride;
         notifyListeners();
       }
     });
+  }
+
+  void _listenToMessages(String rideId, String currentUserId) {
+    _messagesSubscription?.cancel();
+    _isFirstMessagesLoad = true;
+    _previousMessages = [];
+    _messagesSubscription = _firestoreService.streamMessages(rideId).listen((messages) {
+      if (_isFirstMessagesLoad) {
+        _previousMessages = messages;
+        _isFirstMessagesLoad = false;
+        return;
+      }
+
+      // Solo notificar si la pantalla de chat no está abierta en este viaje
+      if (NotificationService.isChatOpen && NotificationService.activeRideId == rideId) {
+        _previousMessages = messages;
+        return;
+      }
+
+      for (var message in messages) {
+        final wasNotified = _previousMessages.any((m) => m.id == message.id);
+        if (!wasNotified && message.senderId != currentUserId) {
+          _notificationService.showLocalNotification(
+            title: 'Mensaje de chat 💬',
+            body: message.text,
+            payload: rideId,
+          );
+        }
+      }
+      _previousMessages = messages;
+    });
+  }
+
+  void _notifyPassengerOfStatusChange(RideModel ride) {
+    String? title;
+    String? body;
+
+    switch (ride.status) {
+      case RideStatus.accepted:
+        title = '¡Conductor encontrado!';
+        body = '${ride.driverName ?? 'Un conductor'} ha aceptado tu solicitud.';
+        break;
+      case RideStatus.driverOnWay:
+        title = '¡Conductor en camino!';
+        body = '${ride.driverName ?? 'El conductor'} va en camino a tu ubicación.';
+        break;
+      case RideStatus.inProgress:
+        title = '¡Viaje iniciado!';
+        body = 'Estás en camino a tu destino. ¡Disfruta del viaje!';
+        break;
+      case RideStatus.completed:
+        title = '¡Viaje finalizado!';
+        body = 'Has llegado a tu destino. Procede a realizar el pago de \$${ride.fare?.toStringAsFixed(2) ?? '0.00'}.';
+        break;
+      case RideStatus.cancelled:
+        title = 'Viaje cancelado';
+        body = 'Tu solicitud de viaje ha sido cancelada.';
+        break;
+      default:
+        break;
+    }
+
+    if (title != null && body != null) {
+      _notificationService.showLocalNotification(
+        title: title,
+        body: body,
+        payload: ride.rideId,
+      );
+    }
   }
 
   // ============ CONDUCTOR: Aceptar/Rechazar viaje ============
@@ -177,42 +273,87 @@ class RideProvider extends ChangeNotifier {
       'driverId': driverId,
       'acceptedAt': Timestamp.now(),
     });
-
-    // Notificar al cliente
-    _notificationService.showLocalNotification(
-      title: '¡Conductor encontrado!',
-      body: 'Un conductor ha aceptado tu solicitud.',
-      payload: rideId,
-    );
   }
 
   Future<void> rejectRide(String rideId, String driverId) async {
-    // Obtenemos el viaje desde Firestore directamente, ya que _currentRide es null para el conductor
-    final doc = await FirebaseFirestore.instance.collection('rides').doc(rideId).get();
-    if (!doc.exists || doc.data() == null) return;
-    
-    final ride = RideModel.fromMap(doc.data()!);
+    try {
+      // 1. Obtener el viaje directamente de Firestore
+      final doc = await FirebaseFirestore.instance.collection('rides').doc(rideId).get();
+      if (!doc.exists || doc.data() == null) return;
+      
+      final ride = RideModel.fromMap(doc.data()!);
 
-    // Obtener el nombre del conductor que rechazó para mostrarlo al pasajero
-    final driverDoc = await FirebaseFirestore.instance.collection('drivers').doc(driverId).get();
-    final driverName = driverDoc.exists ? (driverDoc.data()?['name'] ?? 'Un conductor') : 'Un conductor';
+      // 2. Obtener el nombre del conductor que rechaza para mostrarlo al pasajero
+      final driverDoc = await FirebaseFirestore.instance.collection('drivers').doc(driverId).get();
+      final driverName = driverDoc.exists ? (driverDoc.data()?['name'] ?? 'Un conductor') : 'Un conductor';
 
-    final rejectedList = List<String>.from(ride.rejectedDrivers)..add(driverId);
-    final rejectedNamesList = List<String>.from(ride.rejectedDriverNames)..add(driverName);
+      final rejectedList = List<String>.from(ride.rejectedDrivers)..add(driverId);
+      final rejectedNamesList = List<String>.from(ride.rejectedDriverNames)..add(driverName);
 
-    await _firestoreService.updateRide(rideId, {
-      'driverId': null,
-      'driverName': null,
-      'rejectedDrivers': rejectedList,
-      'rejectedDriverNames': rejectedNamesList,
-    });
+      // 3. Buscar siguiente conductor disponible
+      final drivers = await _firestoreService.getAvailableDrivers();
 
-    // Buscar siguiente conductor
-    final updatedRide = ride.copyWith(
-      rejectedDrivers: rejectedList,
-      rejectedDriverNames: rejectedNamesList,
-    );
-    await _findNearestDriver(updatedRide);
+      // Filtrar conductores que ya rechazaron y que tienen ubicación válida
+      final availableDrivers = drivers
+          .where((d) =>
+              !rejectedList.contains(d.uid) && d.location != null)
+          .toList();
+
+      if (availableDrivers.isEmpty) {
+        // No hay más conductores disponibles, cancelar el viaje en un solo update
+        _error = 'Ningún conductor disponible pudo aceptar tu solicitud.';
+        await _firestoreService.updateRide(rideId, {
+          'driverId': null,
+          'driverName': null,
+          'status': RideStatus.cancelled.name,
+          'rejectedDrivers': rejectedList,
+          'rejectedDriverNames': rejectedNamesList,
+        });
+        notifyListeners();
+        return;
+      }
+
+      // 4. Calcular distancias y encontrar el más cercano
+      DriverModel? nearestDriver;
+      double minDistance = double.infinity;
+
+      for (final driver in availableDrivers) {
+        final distance = _locationService.calculateDistance(
+          ride.pickupLocation.latitude,
+          ride.pickupLocation.longitude,
+          driver.location!.latitude,
+          driver.location!.longitude,
+        );
+
+        if (distance < minDistance) {
+          minDistance = distance;
+          nearestDriver = driver;
+        }
+      }
+
+      if (nearestDriver != null) {
+        // Asignar al siguiente conductor más cercano en un solo update
+        await _firestoreService.updateRide(rideId, {
+          'driverId': nearestDriver.uid,
+          'driverName': nearestDriver.name,
+          'rejectedDrivers': rejectedList,
+          'rejectedDriverNames': rejectedNamesList,
+        });
+      } else {
+        // En caso extremo, cancelar en un solo update
+        _error = 'No pudimos asignar un conductor a tu viaje.';
+        await _firestoreService.updateRide(rideId, {
+          'driverId': null,
+          'driverName': null,
+          'status': RideStatus.cancelled.name,
+          'rejectedDrivers': rejectedList,
+          'rejectedDriverNames': rejectedNamesList,
+        });
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error en rejectRide: $e');
+    }
   }
 
   // ============ CONDUCTOR: Cambiar estado del viaje ============
@@ -252,15 +393,19 @@ class RideProvider extends ChangeNotifier {
   // Limpiar estado
   void clearRide() {
     _rideSubscription?.cancel();
+    _messagesSubscription?.cancel();
     _currentRide = null;
     _assignedDriver = null;
     _error = null;
+    _previousMessages = [];
+    _isFirstMessagesLoad = true;
     notifyListeners();
   }
 
   @override
   void dispose() {
     _rideSubscription?.cancel();
+    _messagesSubscription?.cancel();
     super.dispose();
   }
 }

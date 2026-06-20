@@ -1,0 +1,87 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+  
+    // Función auxiliar: verifica si el usuario está autenticado
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    // Función auxiliar: verifica si el usuario es administrador
+    function isAdmin() {
+      return isAuth() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Colección: Configuración y Tarifas Nacionales (Solo Lectura)
+    match /config/{document=**} {
+      allow read: if isAuth();
+      allow write: if false; // Solo se modifica desde la consola de Firebase o por un Admin (si se añade un rol de admin luego)
+    }
+    match /national_fares/{document=**} {
+      allow read: if isAuth();
+      allow write: if false;
+    }
+
+    // Colección: Pasajeros (Usuarios)
+    match /users/{userId} {
+      // Cualquiera autenticado puede leer datos básicos (para mostrar nombres en el chat/viaje)
+      allow read: if isAuth();
+      // Solo el dueño de la cuenta puede crear o modificar su perfil
+      allow write: if isAuth() && request.auth.uid == userId;
+    }
+
+    // Colección: Conductores
+    match /drivers/{driverId} {
+      // Cualquiera puede leer la lista de conductores (Directorio)
+      allow read: if isAuth();
+      // Solo el conductor dueño o un administrador pueden escribir/modificar
+      allow write: if isAuth() && (request.auth.uid == driverId || isAdmin());
+    }
+
+    // Colección: Calificaciones
+    match /ratings/{ratingId} {
+      allow read: if isAuth();
+      // Solo pasajeros autenticados pueden dejar calificaciones
+      allow create: if isAuth() && request.resource.data.clientId == request.auth.uid;
+      allow update, delete: if false; // Una vez calificado, no se altera
+    }
+
+    // Colección: Viajes (Rides)
+    match /rides/{rideId} {
+      // Lectura: Pasajeros y conductores pueden leer los viajes
+      allow read: if isAuth();
+
+      // Creación: Solo el pasajero que inicia el viaje puede crearlo
+      allow create: if isAuth() && request.resource.data.clientId == request.auth.uid;
+
+      // Actualización: 
+      // 1. El pasajero puede cancelar el viaje.
+      // 2. El conductor puede actualizar si se le asigna el viaje o lo está gestionando.
+      allow update: if isAuth() && (
+        resource.data.clientId == request.auth.uid || 
+        request.resource.data.driverId == request.auth.uid ||
+        resource.data.driverId == request.auth.uid ||
+        resource.data.driverId == null
+      );
+
+      // Eliminación: Los viajes no se borran, cambian a estado "cancelled" o "completed"
+      allow delete: if false;
+      
+      // Subcolección: Chat del Viaje
+      match /messages/{messageId} {
+        // Solo pueden leer y escribir el cliente que pidió el viaje y el conductor asignado
+        allow read, create: if isAuth() && (
+          get(/databases/$(database)/documents/rides/$(rideId)).data.clientId == request.auth.uid ||
+          get(/databases/$(database)/documents/rides/$(rideId)).data.driverId == request.auth.uid
+        );
+        allow update, delete: if false;
+      }
+    }
+
+    // Colección: Alertas SOS (Botón de Pánico)
+    match /sos_alerts/{alertId} {
+      // Cualquier usuario autenticado puede enviar una alerta y el administrador puede leer/resolver
+      allow read, write: if isAuth();
+    }
+  }
+}

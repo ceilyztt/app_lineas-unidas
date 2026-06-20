@@ -37,6 +37,12 @@ class DriverModel {
   final GeoPoint? location;
   final String? fcmToken;
   final DateTime createdAt;
+  final DateTime? lastLocationUpdate;
+
+  // Datos de Pago Móvil
+  final String? bankName;
+  final String? bankPhone;
+  final String? bankDni;
 
   DriverModel({
     required this.uid,
@@ -68,6 +74,10 @@ class DriverModel {
     this.location,
     this.fcmToken,
     required this.createdAt,
+    this.lastLocationUpdate,
+    this.bankName,
+    this.bankPhone,
+    this.bankDni,
   });
 
   Map<String, dynamic> toMap() {
@@ -101,6 +111,10 @@ class DriverModel {
       'location': location,
       'fcmToken': fcmToken,
       'createdAt': Timestamp.fromDate(createdAt),
+      'lastLocationUpdate': lastLocationUpdate != null ? Timestamp.fromDate(lastLocationUpdate!) : null,
+      'bankName': bankName,
+      'bankPhone': bankPhone,
+      'bankDni': bankDni,
     };
   }
 
@@ -135,6 +149,10 @@ class DriverModel {
       location: map['location'] as GeoPoint?,
       fcmToken: map['fcmToken'],
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      lastLocationUpdate: (map['lastLocationUpdate'] as Timestamp?)?.toDate(),
+      bankName: map['bankName'],
+      bankPhone: map['bankPhone'],
+      bankDni: map['bankDni'],
     );
   }
 
@@ -168,6 +186,10 @@ class DriverModel {
     GeoPoint? location,
     String? fcmToken,
     DateTime? createdAt,
+    DateTime? lastLocationUpdate,
+    String? bankName,
+    String? bankPhone,
+    String? bankDni,
   }) {
     return DriverModel(
       uid: uid ?? this.uid,
@@ -199,6 +221,10 @@ class DriverModel {
       location: location ?? this.location,
       fcmToken: fcmToken ?? this.fcmToken,
       createdAt: createdAt ?? this.createdAt,
+      lastLocationUpdate: lastLocationUpdate ?? this.lastLocationUpdate,
+      bankName: bankName ?? this.bankName,
+      bankPhone: bankPhone ?? this.bankPhone,
+      bankDni: bankDni ?? this.bankDni,
     );
   }
 }

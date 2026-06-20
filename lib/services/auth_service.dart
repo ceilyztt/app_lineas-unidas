@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'api_upload_service.dart';
 import '../models/user_model.dart';
 import '../models/driver_model.dart';
 
@@ -146,13 +146,7 @@ class AuthService {
   }
 
   Future<String?> _uploadImage(File file, String uid, String pathName, {String folder = 'drivers'}) async {
-    try {
-      final ref = FirebaseStorage.instance.ref().child('$folder/$uid/$pathName.jpg');
-      await ref.putFile(file);
-      return await ref.getDownloadURL();
-    } catch (e) {
-      return null;
-    }
+    return await ApiUploadService.subirImagenAInternet(file);
   }
 
   // Iniciar sesión
@@ -214,6 +208,9 @@ class AuthService {
           isApproved: true, // Auto-aprobado para facilitar pruebas
           isAvailable: false,
           createdAt: DateTime.now(),
+          bankName: 'Banesco',
+          bankPhone: '04121234567',
+          bankDni: 'V-12345678',
         );
         await _firestore.collection('drivers').doc(uid).set(driver.toMap());
       }

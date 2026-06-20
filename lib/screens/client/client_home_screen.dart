@@ -4,6 +4,7 @@ import '../../config/theme.dart';
 import '../../config/routes.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/currency_provider.dart';
+import '../../providers/location_provider.dart';
 
 class ClientHomeScreen extends StatefulWidget {
   const ClientHomeScreen({super.key});
@@ -14,6 +15,15 @@ class ClientHomeScreen extends StatefulWidget {
 
 class _ClientHomeScreenState extends State<ClientHomeScreen> {
   int _selectedIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<LocationProvider>(context, listen: false)
+          .checkAndPromptGPSAndPermissions(context);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -114,31 +124,35 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                             ),
                           ),
                           const SizedBox(width: 12),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Líneas Unidas',
-                                style: TextStyle(
-                                  color: AppTheme.primaryColor,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 18,
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Líneas Unidas',
+                                  style: TextStyle(
+                                    color: AppTheme.primaryColor,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 18,
+                                  ),
                                 ),
-                              ),
-                              Consumer<AuthProvider>(
-                                builder: (context, auth, _) {
-                                  return Text(
-                                    '¡Hola, ${auth.userModel?.name ?? 'Pasajero'}! 👋',
-                                    style: const TextStyle(
-                                      color: AppTheme.textWhite,
-                                      fontSize: 13,
-                                    ),
-                                  );
-                                },
-                              ),
-                            ],
+                                Consumer<AuthProvider>(
+                                  builder: (context, auth, _) {
+                                    return Text(
+                                      '¡Hola, ${auth.userModel?.name ?? 'Pasajero'}! 👋',
+                                      style: const TextStyle(
+                                        color: AppTheme.textWhite,
+                                        fontSize: 13,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
                           ),
-                          const Spacer(),
+                          const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                             decoration: BoxDecoration(

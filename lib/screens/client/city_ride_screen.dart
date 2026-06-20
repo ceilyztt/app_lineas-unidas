@@ -688,8 +688,9 @@ class _CityRideScreenState extends State<CityRideScreen> {
                                                               Text(
                                                                 'Bs. $bsFare',
                                                                 style: const TextStyle(
-                                                                  color: AppTheme.textGrey,
-                                                                  fontSize: 13,
+                                                                  color: AppTheme.primaryColor,
+                                                                  fontWeight: FontWeight.bold,
+                                                                  fontSize: 18,
                                                                 ),
                                                               ),
                                                           ],

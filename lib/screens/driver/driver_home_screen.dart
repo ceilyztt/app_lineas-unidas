@@ -15,6 +15,7 @@ import '../../providers/ride_provider.dart';
 import '../../providers/currency_provider.dart';
 import '../../models/ride_model.dart';
 import '../../services/firestore_service.dart';
+import '../widgets/panic_button_widget.dart';
 
 class DriverHomeScreen extends StatefulWidget {
   const DriverHomeScreen({super.key});
@@ -44,7 +45,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
     if (authProvider.firebaseUser != null) {
       driverProvider.loadDriver(authProvider.firebaseUser!.uid);
-      locationProvider.getCurrentLocation();
+      locationProvider.checkAndPromptGPSAndPermissions(context);
     }
   }
 
@@ -82,13 +83,34 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
+    final driverProvider = Provider.of<DriverProvider>(context);
+    final locationProvider = Provider.of<LocationProvider>(context);
+    final driver = driverProvider.driver;
+
+    if (driver != null && driver.isApproved && driver.isAvailable && !locationProvider.isTracking) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        final success = await locationProvider.startTracking(driver.uid);
+        if (!success && context.mounted) {
+          await driverProvider.toggleAvailability(driver.uid);
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(locationProvider.error ?? 'Error de ubicación al autoiniciar.'),
+              backgroundColor: AppTheme.errorRed,
+            ),
+          );
+        }
+      });
+    }
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-          _buildDriverHeader(context, authProvider),
+      body: Stack(
+        children: [
+          SingleChildScrollView(
+            child: Column(
+              children: [
+              _buildDriverHeader(context, authProvider),
           // Toggle de disponibilidad
           Consumer<DriverProvider>(
             builder: (context, driverProvider, _) {
@@ -202,17 +224,28 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                     ),
                     Switch(
                       value: driver.isAvailable,
-                      onChanged: (value) {
+                      onChanged: (value) async {
                         final uid = authProvider.firebaseUser!.uid;
-                        driverProvider.toggleAvailability(uid);
-
                         final locationProvider =
                             Provider.of<LocationProvider>(context,
                                 listen: false);
                         if (value) {
-                          locationProvider.startTracking(uid);
+                          final success = await locationProvider.startTracking(uid);
+                          if (success) {
+                            await driverProvider.toggleAvailability(uid);
+                          } else {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(locationProvider.error ?? 'Error al activar ubicación'),
+                                  backgroundColor: AppTheme.errorRed,
+                                ),
+                              );
+                            }
+                          }
                         } else {
                           locationProvider.stopTracking();
+                          await driverProvider.toggleAvailability(uid);
                         }
                       },
                       activeThumbColor: AppTheme.successGreen,
@@ -419,7 +452,14 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         ],
         ),
       ),
-    );
+      const Positioned(
+        bottom: 20,
+        right: 16,
+        child: PanicButtonWidget(role: 'driver'),
+      ),
+    ],
+  ),
+);
   }
 
   Widget _buildDriverHeader(BuildContext context, AuthProvider authProvider) {
@@ -446,30 +486,36 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Image.asset(
+                        'assets/images/logo.png',
+                        height: 32,
+                        width: 32,
+                      ),
                     ),
-                    child: Image.asset(
-                      'assets/images/logo.png',
-                      height: 32,
-                      width: 32,
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'Líneas Unidas',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.primaryColor,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'Líneas Unidas',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.primaryColor,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               Row(
                 children: [
@@ -498,6 +544,18 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
                 color: AppTheme.textWhite,
+              ),
+              textAlign: TextAlign.right,
+            ),
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              'Mi UID: ${authProvider.firebaseUser?.uid ?? 'N/D'}',
+              style: const TextStyle(
+                fontSize: 10,
+                color: AppTheme.textGrey,
+                fontFamily: 'monospace',
               ),
               textAlign: TextAlign.right,
             ),
@@ -841,6 +899,132 @@ class ActiveRideCard extends StatelessWidget {
     }
   }
 
+  Future<void> _confirmPayment(BuildContext context, String rideId) async {
+    final firestoreService = FirestoreService();
+    try {
+      await firestoreService.updateRide(rideId, {
+        'paymentStatus': 'confirmed',
+      });
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Pago confirmado con éxito. El viaje ha finalizado.'),
+            backgroundColor: AppTheme.successGreen,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al confirmar pago: $e'),
+            backgroundColor: AppTheme.errorRed,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _rejectPayment(BuildContext context, String rideId) async {
+    final firestoreService = FirestoreService();
+    try {
+      await firestoreService.updateRide(rideId, {
+        'paymentStatus': 'rejected',
+      });
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Pago rechazado. El cliente ha sido notificado.'),
+            backgroundColor: AppTheme.errorRed,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al rechazar pago: $e'),
+            backgroundColor: AppTheme.errorRed,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showCaptureDialog(BuildContext context, String imageUrl) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: AppTheme.backgroundColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AppBar(
+                title: const Text('Captura de Pago Móvil'),
+                automaticallyImplyLeading: false,
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              Flexible(
+                child: InteractiveViewer(
+                  child: Image.network(
+                    imageUrl,
+                    fit: BoxFit.contain,
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(40),
+                          child: CircularProgressIndicator(color: AppTheme.primaryColor),
+                        ),
+                      );
+                    },
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(40),
+                          child: Text(
+                            'Error al cargar la imagen.',
+                            style: TextStyle(color: AppTheme.errorRed),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDetailText(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: AppTheme.textGrey, fontSize: 13)),
+          Text(
+            value,
+            style: const TextStyle(color: AppTheme.textWhite, fontWeight: FontWeight.bold, fontSize: 13),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final rideProvider = Provider.of<RideProvider>(context, listen: false);
@@ -857,6 +1041,9 @@ class ActiveRideCard extends StatelessWidget {
     } else if (ride.status == RideStatus.inProgress) {
       statusText = 'VIAJE EN PROGRESO';
       statusColor = AppTheme.primaryColor;
+    } else if (ride.status == RideStatus.completed) {
+      statusText = 'ESPERANDO PAGO';
+      statusColor = Colors.amber;
     }
 
     return Card(
@@ -872,7 +1059,10 @@ class ActiveRideCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.directions_car, color: statusColor),
+                Icon(
+                  ride.status == RideStatus.completed ? Icons.hourglass_bottom : Icons.directions_car, 
+                  color: statusColor
+                ),
                 const SizedBox(width: 8),
                 Text(
                   statusText,
@@ -888,6 +1078,85 @@ class ActiveRideCard extends StatelessWidget {
             Text(
               'Cliente: ${ride.clientName}',
               style: const TextStyle(color: AppTheme.textWhite, fontSize: 16),
+            ),
+            if (ride.status == RideStatus.completed && ride.driverName != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Conductor asignado: ${ride.driverName}',
+                style: const TextStyle(color: AppTheme.textGrey, fontSize: 13),
+              ),
+            ],
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.all(8),
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: AppTheme.backgroundColor.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.cardColor.withValues(alpha: 0.5)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'INFO DEPURACIÓN:',
+                    style: TextStyle(color: AppTheme.primaryColor, fontSize: 9, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '• ID Viaje: ${ride.rideId}',
+                    style: const TextStyle(color: AppTheme.textGrey, fontSize: 9, fontFamily: 'monospace'),
+                  ),
+                  Text(
+                    '• ID Conductor Viaje: ${ride.driverId}',
+                    style: const TextStyle(color: AppTheme.textGrey, fontSize: 9, fontFamily: 'monospace'),
+                  ),
+                  const SizedBox(height: 6),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 28,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.errorRed,
+                        padding: EdgeInsets.zero,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                      ),
+                      onPressed: () async {
+                        final firestoreService = FirestoreService();
+                        try {
+                          await firestoreService.updateRide(ride.rideId, {
+                            'paymentStatus': 'confirmed',
+                            'status': RideStatus.completed.name,
+                          });
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Viaje de prueba forzado a completado/confirmado.'),
+                                backgroundColor: AppTheme.successGreen,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Error al forzar cierre: $e'),
+                                backgroundColor: AppTheme.errorRed,
+                              ),
+                            );
+                          }
+                        }
+                      },
+                      child: const Text(
+                        'FORZAR CIERRE DE VIAJE (TEST)',
+                        style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 8),
             Row(
@@ -917,20 +1186,222 @@ class ActiveRideCard extends StatelessWidget {
                 ],
               ),
             ],
-            const SizedBox(height: 16),
+            
+            if (ride.status != RideStatus.completed) ...[
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.navigation),
+                  label: const Text('NAVEGAR (WAZE / MAPS)'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.surfaceColor,
+                    foregroundColor: AppTheme.primaryColor,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  onPressed: _openNavigation,
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                icon: const Icon(Icons.navigation),
-                label: const Text('NAVEGAR (WAZE / MAPS)'),
+                onPressed: () {
+                  Navigator.pushNamed(context, AppRoutes.chat, arguments: ride.rideId);
+                },
+                icon: const Icon(Icons.chat),
+                label: const Text('CHAT CON PASAJERO'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.surfaceColor,
-                  foregroundColor: AppTheme.primaryColor,
+                  backgroundColor: AppTheme.primaryColor,
+                  foregroundColor: AppTheme.backgroundColor,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
-                onPressed: _openNavigation,
               ),
             ),
+            
+            // Sección de Pago si está finalizado (completed)
+            if (ride.status == RideStatus.completed) ...[
+              const SizedBox(height: 16),
+              const Divider(color: AppTheme.cardColor),
+              const SizedBox(height: 12),
+              
+              if (ride.paymentStatus == 'pending') ...[
+                if (ride.paymentMethod == 'cash') ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.money, color: Colors.green),
+                            SizedBox(width: 8),
+                            Text(
+                              'PAGO EN EFECTIVO',
+                              style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'El cliente indica que te pagará en efectivo la cantidad de: \$${ride.fare?.toStringAsFixed(2)}.',
+                          style: const TextStyle(color: AppTheme.textWhite, fontSize: 13),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppTheme.errorRed,
+                                  side: const BorderSide(color: AppTheme.errorRed),
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                ),
+                                onPressed: () => _rejectPayment(context, ride.rideId),
+                                child: const Text('RECHAZAR'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green,
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                ),
+                                onPressed: () => _confirmPayment(context, ride.rideId),
+                                child: const Text('CONFIRMAR'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  )
+                ] else if (ride.paymentMethod == 'pago_movil') ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.3)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.qr_code_scanner, color: AppTheme.primaryColor),
+                            SizedBox(width: 8),
+                            Text(
+                              'VERIFICAR PAGO MÓVIL',
+                              style: TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        _buildDetailText('Banco:', ride.paymentDetails?['banco'] ?? ''),
+                        _buildDetailText('Referencia:', ride.paymentDetails?['referencia'] ?? ''),
+                        _buildDetailText('Monto:', ride.paymentDetails?['monto'] ?? ''),
+                        _buildDetailText('Fecha:', ride.paymentDetails?['fecha'] ?? ''),
+                        const SizedBox(height: 12),
+                        
+                        // Botón para ver la captura
+                        if (ride.paymentDetails?['imagenUrl'] != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                ),
+                                icon: const Icon(Icons.image),
+                                label: const Text('VER CAPTURA DE PAGO'),
+                                onPressed: () => _showCaptureDialog(context, ride.paymentDetails!['imagenUrl']),
+                              ),
+                            ),
+                          ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppTheme.errorRed,
+                                  side: const BorderSide(color: AppTheme.errorRed),
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                ),
+                                onPressed: () => _rejectPayment(context, ride.rideId),
+                                child: const Text('RECHAZAR'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.primaryColor,
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                ),
+                                onPressed: () => _confirmPayment(context, ride.rideId),
+                                child: const Text('CONFIRMAR'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  )
+                ]
+              ] else if (ride.paymentStatus == 'rejected') ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.errorRed.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.errorRed.withValues(alpha: 0.3)),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.error_outline, color: AppTheme.errorRed),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Rechazaste el pago. Esperando que el cliente envíe una nueva forma de pago.',
+                          style: TextStyle(color: AppTheme.textGrey, fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              ] else ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.hourglass_empty, color: Colors.amber),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Esperando que el cliente envíe el pago...',
+                          style: TextStyle(color: AppTheme.textGrey, fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              ]
+            ],
+            
             const SizedBox(height: 12),
             if (ride.status == RideStatus.accepted)
               SizedBox(

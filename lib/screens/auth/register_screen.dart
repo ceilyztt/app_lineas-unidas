@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../config/theme.dart';
@@ -124,7 +125,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (source == null) return;
 
     final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: source);
+    final pickedFile = await picker.pickImage(
+      source: source,
+      imageQuality: 60,
+      maxWidth: 1024,
+      maxHeight: 1024,
+    );
     if (pickedFile != null) {
       setState(() {
         if (type == 'driver') {
@@ -299,6 +305,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   controller: _nameController,
                   style: const TextStyle(color: AppTheme.textWhite),
                   decoration: const InputDecoration(labelText: 'Nombre completo', prefixIcon: Icon(Icons.person_outline)),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]')),
+                  ],
                   validator: (value) => value == null || value.isEmpty ? 'Requerido' : null,
                 ),
                 const SizedBox(height: 16),
@@ -319,6 +328,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   keyboardType: TextInputType.phone,
                   style: const TextStyle(color: AppTheme.textWhite),
                   decoration: const InputDecoration(labelText: 'Teléfono celular', prefixIcon: Icon(Icons.phone_outlined)),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                  ],
                   validator: (value) => value == null || value.isEmpty ? 'Requerido' : null,
                 ),
                 const SizedBox(height: 16),
@@ -337,8 +349,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   validator: (value) {
                     if (value == null || value.isEmpty) return 'Requerido';
                     if (value.length < 6) return 'Mínimo 6 caracteres';
+                    if (value.contains('"')) return 'No se admiten comillas dobles';
                     return null;
                   },
+                  inputFormatters: [
+                    FilteringTextInputFormatter.deny(RegExp(r'"')),
+                  ],
                 ),
                 const SizedBox(height: 24),
 
@@ -370,6 +386,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     controller: _addressController,
                     style: const TextStyle(color: AppTheme.textWhite),
                     decoration: const InputDecoration(labelText: 'Dirección de residencia', prefixIcon: Icon(Icons.home_outlined)),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9áéíóúÁÉÍÓÚñÑ\s]')),
+                    ],
                     validator: (value) => value == null || value.isEmpty ? 'Requerido' : null,
                   ),
                   const SizedBox(height: 16),
@@ -382,6 +401,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           keyboardType: TextInputType.number,
                           style: const TextStyle(color: AppTheme.textWhite),
                           decoration: const InputDecoration(labelText: 'Edad', prefixIcon: Icon(Icons.calendar_month)),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
                           validator: (value) => value == null || value.isEmpty ? 'Requerido' : null,
                         ),
                       ),
@@ -392,6 +414,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           keyboardType: TextInputType.number,
                           style: const TextStyle(color: AppTheme.textWhite),
                           decoration: const InputDecoration(labelText: 'Años Exp.', prefixIcon: Icon(Icons.work_history_outlined)),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
                           validator: (value) => value == null || value.isEmpty ? 'Requerido' : null,
                         ),
                       ),
@@ -403,6 +428,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     controller: _affiliatedLineController,
                     style: const TextStyle(color: AppTheme.textWhite),
                     decoration: const InputDecoration(labelText: 'Línea Actual (Escriba Líneas Unidas u otra)', prefixIcon: Icon(Icons.business)),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]')),
+                    ],
                     validator: (value) => value == null || value.isEmpty ? 'Requerido' : null,
                   ),
                   const SizedBox(height: 24),
@@ -422,6 +450,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           controller: _vehicleBrandController,
                           style: const TextStyle(color: AppTheme.textWhite),
                           decoration: const InputDecoration(labelText: 'Marca (Ej: Toyota)', prefixIcon: Icon(Icons.directions_car_outlined)),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(RegExp(r'[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]')),
+                          ],
                           validator: (value) => value == null || value.isEmpty ? 'Requerido' : null,
                         ),
                       ),
@@ -431,6 +462,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           controller: _vehicleColorController,
                           style: const TextStyle(color: AppTheme.textWhite),
                           decoration: const InputDecoration(labelText: 'Color', prefixIcon: Icon(Icons.color_lens_outlined)),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(RegExp(r'[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]')),
+                          ],
                           validator: (value) => value == null || value.isEmpty ? 'Requerido' : null,
                         ),
                       ),
@@ -445,6 +479,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           controller: _vehicleModelController,
                           style: const TextStyle(color: AppTheme.textWhite),
                           decoration: const InputDecoration(labelText: 'Modelo (Ej: Corolla)', prefixIcon: Icon(Icons.info_outline)),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(RegExp(r'[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]')),
+                          ],
                           validator: (value) => value == null || value.isEmpty ? 'Requerido' : null,
                         ),
                       ),

@@ -155,8 +155,23 @@ class DriverProfileScreen extends StatelessWidget {
                     ),
                   ),
 
+                  const SizedBox(height: 24),
+                  _buildSectionTitle('Datos de Pago Móvil'),
+                  _buildInfoTile(Icons.account_balance, 'Banco', (driver?.bankName == null || driver!.bankName!.isEmpty) ? 'No configurado' : driver.bankName!),
+                  _buildInfoTile(Icons.phone_android, 'Teléfono Pago Móvil', (driver?.bankPhone == null || driver!.bankPhone!.isEmpty) ? 'No configurado' : driver.bankPhone!),
+                  _buildInfoTile(Icons.badge_outlined, 'Cédula / RIF', (driver?.bankDni == null || driver!.bankDni!.isEmpty) ? 'No configurado' : driver.bankDni!),
+
                   const SizedBox(height: 32),
                   _buildSectionTitle('Opciones de Cuenta'),
+                  ListTile(
+                    leading: const Icon(Icons.account_balance_wallet, color: AppTheme.successGreen),
+                    title: const Text('Panel de Ganancias', style: TextStyle(color: AppTheme.textWhite)),
+                    trailing: const Icon(Icons.chevron_right, color: AppTheme.textGrey),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    tileColor: AppTheme.surfaceColor,
+                    onTap: () => Navigator.pushNamed(context, AppRoutes.driverEarnings),
+                  ),
+                  const SizedBox(height: 8),
                   ListTile(
                     leading: const Icon(Icons.history, color: AppTheme.primaryColor),
                     title: const Text('Historial de viajes', style: TextStyle(color: AppTheme.textWhite)),
@@ -180,6 +195,7 @@ class DriverProfileScreen extends StatelessWidget {
                     width: double.infinity,
                     child: OutlinedButton.icon(
                       onPressed: () async {
+                        Provider.of<DriverProvider>(context, listen: false).clearDriver();
                         await authProvider.signOut();
                         if (context.mounted) Navigator.pushNamedAndRemoveUntil(context, AppRoutes.login, (r) => false);
                       },
@@ -188,6 +204,21 @@ class DriverProfileScreen extends StatelessWidget {
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppTheme.errorRed,
                         side: const BorderSide(color: AppTheme.errorRed),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Eliminar Cuenta
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () => _showDeleteAccountDialog(context, authProvider),
+                      icon: const Icon(Icons.delete_forever, color: Colors.white),
+                      label: const Text('Eliminar Cuenta Definitivamente', style: TextStyle(color: Colors.white)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.errorRed,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                     ),
@@ -352,6 +383,83 @@ class DriverProfileScreen extends StatelessWidget {
               },
               style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor),
               child: const Text('Guardar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showDeleteAccountDialog(BuildContext context, AuthProvider auth) {
+    final passwordController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppTheme.surfaceColor,
+          title: const Text('Eliminar Cuenta', style: TextStyle(color: AppTheme.errorRed, fontWeight: FontWeight.bold)),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  '¡ADVERTENCIA! Esta acción es irreversible. Perderás todos tus datos, el registro de tu vehículo y tu historial de viajes.',
+                  style: TextStyle(color: AppTheme.textWhite),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Por seguridad, ingresa tu contraseña para confirmar:',
+                  style: TextStyle(color: AppTheme.textGrey, fontSize: 12),
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: passwordController,
+                  obscureText: true,
+                  style: const TextStyle(color: AppTheme.textWhite),
+                  decoration: const InputDecoration(labelText: 'Contraseña'),
+                  validator: (v) => v!.isEmpty ? 'Requerido' : null,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar', style: TextStyle(color: AppTheme.textGrey)),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (!formKey.currentState!.validate()) return;
+                
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (_) => const Center(child: CircularProgressIndicator()),
+                );
+
+                final success = await auth.deleteAccount(passwordController.text);
+                
+                if (!context.mounted) return;
+                Navigator.pop(context); // cerrar progress
+
+                if (success) {
+                  Navigator.pop(context); // cerrar dialog form
+                  Provider.of<DriverProvider>(context, listen: false).clearDriver();
+                  Navigator.pushNamedAndRemoveUntil(context, AppRoutes.login, (r) => false);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Cuenta eliminada permanentemente', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), backgroundColor: AppTheme.successGreen),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(auth.error ?? 'Error de actualización', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), backgroundColor: AppTheme.errorRed),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.errorRed),
+              child: const Text('Eliminar Definitivamente'),
             ),
           ],
         );

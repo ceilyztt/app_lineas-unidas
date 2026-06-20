@@ -7,8 +7,10 @@ import '../../config/theme.dart';
 import '../../config/routes.dart';
 import '../../providers/ride_provider.dart';
 import '../../providers/location_provider.dart';
+import '../../providers/location_provider.dart';
 import '../../models/ride_model.dart';
 import '../widgets/ride_info_card.dart';
+import '../widgets/panic_button_widget.dart';
 
 class RideInProgressScreen extends StatefulWidget {
   const RideInProgressScreen({super.key});
@@ -92,13 +94,48 @@ class _RideInProgressScreenState extends State<RideInProgressScreen> {
             }
           }
 
-          // Si el viaje se completó, ir a calificación
+          // Si el viaje se completó, ir a pago o calificación
           if (ride.status == RideStatus.completed) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              Navigator.pushNamed(
-                context,
-                AppRoutes.rating,
-                arguments: ride,
+              if (ride.paymentStatus != 'confirmed') {
+                Navigator.pushReplacementNamed(
+                  context,
+                  AppRoutes.payment,
+                  arguments: ride,
+                );
+              } else {
+                Navigator.pushReplacementNamed(
+                  context,
+                  AppRoutes.rating,
+                  arguments: ride,
+                );
+              }
+            });
+          }
+
+          // Si el viaje fue cancelado (ej: ningún conductor aceptó)
+          if (ride.status == RideStatus.cancelled) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (context) => AlertDialog(
+                  backgroundColor: AppTheme.surfaceColor,
+                  title: const Text('Viaje Cancelado', style: TextStyle(color: AppTheme.textWhite)),
+                  content: const Text(
+                    'Lo sentimos, ningún conductor pudo aceptar tu viaje en este momento. Por favor, intenta de nuevo más tarde.',
+                    style: TextStyle(color: AppTheme.textGrey),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(context).pop(); // Cierra dialog
+                        Navigator.pushReplacementNamed(context, AppRoutes.clientHome); // Vuelve al inicio
+                      },
+                      child: const Text('Aceptar', style: TextStyle(color: AppTheme.primaryColor)),
+                    ),
+                  ],
+                ),
               );
             });
           }
@@ -196,6 +233,14 @@ class _RideInProgressScreenState extends State<RideInProgressScreen> {
                 ),
               ),
 
+              // Botón de Pánico (Solo si el viaje está en curso o conductor en camino)
+              if (ride.status == RideStatus.inProgress || ride.status == RideStatus.driverOnWay)
+                const Positioned(
+                  bottom: 350,
+                  right: 16,
+                  child: PanicButtonWidget(role: 'client'),
+                ),
+
               // Bottom sheet con info del viaje
               Positioned(
                 bottom: 0,
@@ -261,6 +306,29 @@ class _RideInProgressScreenState extends State<RideInProgressScreen> {
                       ],
 
                       const SizedBox(height: 16),
+
+                      // Botón de Chat
+                      if (ride.status == RideStatus.accepted || 
+                          ride.status == RideStatus.driverOnWay || 
+                          ride.status == RideStatus.inProgress)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.pushNamed(context, AppRoutes.chat, arguments: ride.rideId);
+                              },
+                              icon: const Icon(Icons.chat),
+                              label: const Text('CHAT CON CONDUCTOR'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.primaryColor,
+                                foregroundColor: AppTheme.backgroundColor,
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                              ),
+                            ),
+                          ),
+                        ),
 
                       // Botón cancelar
                       if (ride.status == RideStatus.requested ||

@@ -7,6 +7,7 @@ import 'providers/ride_provider.dart';
 import 'providers/location_provider.dart';
 import 'providers/driver_provider.dart';
 import 'providers/currency_provider.dart';
+import 'services/notification_service.dart';
 
 class LineasUnidasApp extends StatelessWidget {
   const LineasUnidasApp({super.key});
@@ -23,6 +24,7 @@ class LineasUnidasApp extends StatelessWidget {
       ],
       child: MaterialApp(
         title: 'Líneas Unidas',
+        navigatorKey: NotificationService.navigatorKey,
         debugShowCheckedModeBanner: false,
         theme: AppTheme.darkTheme,
         // Usamos las constantes definidas en AppRoutes

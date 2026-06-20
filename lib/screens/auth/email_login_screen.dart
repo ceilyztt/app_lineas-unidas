@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../config/theme.dart';
 import '../../config/routes.dart';
@@ -33,6 +34,16 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
       email: _emailController.text.trim(),
       password: _passwordController.text,
     );
+
+    if (!success && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(authProvider.error ?? 'Ocurrió un error al iniciar sesión.'),
+          backgroundColor: AppTheme.errorRed,
+        ),
+      );
+      return;
+    }
 
     if (success && mounted) {
       final role = authProvider.userRole;
@@ -155,8 +166,17 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
                         if (value == null || value.isEmpty) {
                           return 'Ingresa tu contraseña';
                         }
+                        if (value.length < 6) {
+                          return 'Debe tener al menos 6 caracteres';
+                        }
+                        if (value.contains('"')) {
+                          return 'No se admiten comillas dobles';
+                        }
                         return null;
                       },
+                      inputFormatters: [
+                        FilteringTextInputFormatter.deny(RegExp(r'"')),
+                      ],
                     ),
                     const SizedBox(height: 8),
 

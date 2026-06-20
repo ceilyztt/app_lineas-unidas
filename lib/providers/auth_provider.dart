@@ -30,15 +30,23 @@ class AuthProvider extends ChangeNotifier {
   }
 
   void _onAuthStateChanged(User? user) async {
-    _firebaseUser = user;
-    if (user != null) {
-      await _loadUserData(user.uid);
-    } else {
+    try {
+      _firebaseUser = user;
+      if (user != null) {
+        await _loadUserData(user.uid);
+      } else {
+        _userModel = null;
+        _driverModel = null;
+      }
+    } catch (e) {
+      debugPrint("Error en _onAuthStateChanged: $e");
+      _firebaseUser = null;
       _userModel = null;
       _driverModel = null;
+    } finally {
+      _isInitChecked = true;
+      notifyListeners();
     }
-    _isInitChecked = true;
-    notifyListeners();
   }
 
   Future<void> _loadUserData(String uid) async {
@@ -163,6 +171,7 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
       return user != null;
     } catch (e) {
+      debugPrint('Error en signIn: $e');
       _error = e.toString();
       _isLoading = false;
       notifyListeners();
@@ -194,6 +203,18 @@ class AuthProvider extends ChangeNotifier {
 
   // Cerrar sesión
   Future<void> signOut() async {
+    // Si es un conductor, lo ponemos automáticamente como "no disponible"
+    if (_firebaseUser != null && _userModel?.role == 'driver') {
+      try {
+        await FirebaseFirestore.instance
+            .collection('drivers')
+            .doc(_firebaseUser!.uid)
+            .update({'isAvailable': false});
+      } catch (e) {
+        debugPrint('Error al actualizar disponibilidad al cerrar sesión: $e');
+      }
+    }
+
     await _authService.signOut();
     _userModel = null;
     _driverModel = null;
@@ -227,6 +248,24 @@ class AuthProvider extends ChangeNotifier {
         'name': name,
         'phone': phone,
       });
+      await _loadUserData(uid);
+      _isLoading = false; notifyListeners();
+      return true;
+    } catch(e) {
+      _error = e.toString();
+      _isLoading = false; notifyListeners();
+      return false;
+    }
+  }
+
+  // Actualizar Foto de Perfil
+  Future<bool> updateProfilePhoto(String uid, String role, String photoUrl) async {
+    _isLoading = true; notifyListeners();
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({'photoUrl': photoUrl});
+      if (role == 'driver') {
+        await FirebaseFirestore.instance.collection('drivers').doc(uid).update({'photoUrl': photoUrl});
+      }
       await _loadUserData(uid);
       _isLoading = false; notifyListeners();
       return true;
@@ -275,6 +314,51 @@ class AuthProvider extends ChangeNotifier {
       return false;
     } catch (e) {
       _error = 'Contraseña actual incorrecta.';
+      _isLoading = false; notifyListeners();
+      return false;
+    }
+  }
+
+  // Eliminar Cuenta
+  Future<bool> deleteAccount(String currentPassword) async {
+    _isLoading = true; notifyListeners();
+    try {
+      final user = _firebaseUser;
+      if (user != null && user.email != null) {
+        // 1. Re-autenticar por seguridad
+        AuthCredential credential = EmailAuthProvider.credential(email: user.email!, password: currentPassword);
+        await user.reauthenticateWithCredential(credential);
+
+        final uid = user.uid;
+        final role = _userModel?.role;
+
+        // 2. Borrar datos de Firestore según el rol
+        if (role == 'driver') {
+          await FirebaseFirestore.instance.collection('drivers').doc(uid).delete().catchError((e) => debugPrint(e.toString()));
+          await FirebaseFirestore.instance.collection('aspirantes_conductores').doc(uid).delete().catchError((e) => debugPrint(e.toString()));
+        }
+        await FirebaseFirestore.instance.collection('users').doc(uid).delete().catchError((e) => debugPrint(e.toString()));
+
+        // 3. Borrar cuenta de Auth
+        await user.delete();
+
+        // 4. Limpiar estado
+        _userModel = null;
+        _driverModel = null;
+        _isLoading = false; notifyListeners();
+        return true;
+      }
+      return false;
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'wrong-password') {
+        _error = 'Contraseña incorrecta.';
+      } else {
+        _error = 'Ocurrió un error al intentar eliminar la cuenta.';
+      }
+      _isLoading = false; notifyListeners();
+      return false;
+    } catch (e) {
+      _error = 'Ocurrió un error inesperado.';
       _isLoading = false; notifyListeners();
       return false;
     }

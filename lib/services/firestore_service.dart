@@ -1,9 +1,13 @@
+import 'dart:io';
+import 'api_upload_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
 import '../models/driver_model.dart';
 import '../models/ride_model.dart';
 import '../models/rating_model.dart';
 import '../models/national_fare_model.dart';
+import '../models/message_model.dart';
+import '../models/sos_alert_model.dart';
 
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -55,6 +59,7 @@ class FirestoreService {
   Future<void> updateDriverLocation(String uid, GeoPoint location) async {
     await _firestore.collection('drivers').doc(uid).update({
       'location': location,
+      'lastLocationUpdate': FieldValue.serverTimestamp(),
     });
   }
 
@@ -62,6 +67,7 @@ class FirestoreService {
   Future<void> toggleDriverAvailability(String uid, bool isAvailable) async {
     await _firestore.collection('drivers').doc(uid).update({
       'isAvailable': isAvailable,
+      if (isAvailable) 'lastLocationUpdate': FieldValue.serverTimestamp(),
     });
   }
 
@@ -89,10 +95,11 @@ class FirestoreService {
     return _firestore
         .collection('rides')
         .where('clientId', isEqualTo: clientId)
-        .where('status', whereIn: ['requested', 'accepted', 'driverOnWay', 'inProgress'])
+        .where('status', whereIn: ['requested', 'accepted', 'driverOnWay', 'inProgress', 'completed'])
         .snapshots()
         .map((snapshot) => snapshot.docs
             .map((doc) => RideModel.fromMap(doc.data()))
+            .where((ride) => ride.status != RideStatus.completed || ride.paymentStatus != 'confirmed')
             .toList());
   }
 
@@ -101,10 +108,11 @@ class FirestoreService {
     return _firestore
         .collection('rides')
         .where('driverId', isEqualTo: driverId)
-        .where('status', whereIn: ['accepted', 'driverOnWay', 'inProgress'])
+        .where('status', whereIn: ['accepted', 'driverOnWay', 'inProgress', 'completed'])
         .snapshots()
         .map((snapshot) => snapshot.docs
             .map((doc) => RideModel.fromMap(doc.data()))
+            .where((ride) => ride.status != RideStatus.completed || ride.paymentStatus != 'confirmed')
             .toList());
   }
 
@@ -114,6 +122,18 @@ class FirestoreService {
         .collection('rides')
         .where('status', isEqualTo: 'requested')
         .where('driverId', isEqualTo: driverId)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) => RideModel.fromMap(doc.data()))
+            .toList());
+  }
+
+  // Ganancias del conductor (todos los viajes completados)
+  Stream<List<RideModel>> streamDriverEarnings(String driverId) {
+    return _firestore
+        .collection('rides')
+        .where('driverId', isEqualTo: driverId)
+        .where('status', isEqualTo: 'completed')
         .snapshots()
         .map((snapshot) => snapshot.docs
             .map((doc) => RideModel.fromMap(doc.data()))
@@ -206,5 +226,58 @@ class FirestoreService {
     final fareBase = (config['fareBase'] as num).toDouble();
     final pricePerKm = (config['pricePerKm'] as num).toDouble();
     return fareBase + (distanceKm * pricePerKm);
+  }
+
+  // ============ CHAT ============
+
+  Future<void> sendMessage(String rideId, MessageModel message) async {
+    await _firestore
+        .collection('rides')
+        .doc(rideId)
+        .collection('messages')
+        .add(message.toMap());
+  }
+
+  Stream<List<MessageModel>> streamMessages(String rideId) {
+    return _firestore
+        .collection('rides')
+        .doc(rideId)
+        .collection('messages')
+        .orderBy('timestamp', descending: false)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map((doc) => MessageModel.fromMap(doc.data(), doc.id))
+          .toList();
+    });
+  }
+
+  // Subir captura de pago móvil a Firebase Storage
+  Future<String?> uploadPaymentScreenshot(String rideId, File file) async {
+    return await ApiUploadService.subirImagenAInternet(file);
+  }
+
+  // ============ BOTÓN DE PÁNICO (SOS) ============
+
+  Future<void> createSosAlert(SosAlertModel alert) async {
+    await _firestore.collection('sos_alerts').doc(alert.alertId).set(alert.toMap());
+  }
+
+  Stream<List<SosAlertModel>> streamActiveSosAlerts() {
+    return _firestore
+        .collection('sos_alerts')
+        .where('status', isEqualTo: 'active')
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map((doc) => SosAlertModel.fromMap(doc.data()))
+          .toList();
+    });
+  }
+
+  Future<void> resolveSosAlert(String alertId) async {
+    await _firestore.collection('sos_alerts').doc(alertId).update({
+      'status': 'resolved',
+    });
   }
 }

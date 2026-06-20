@@ -1,7 +1,12 @@
+import 'package:flutter/material.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class NotificationService {
+  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+  static bool isChatOpen = false;
+  static String? activeRideId;
+
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
@@ -28,6 +33,7 @@ class NotificationService {
         android: androidSettings,
         iOS: iosSettings,
       ),
+      onDidReceiveNotificationResponse: _handleNotificationTap,
     );
 
     // Crear canal de notificación para Android
@@ -114,5 +120,12 @@ class NotificationService {
   void _handleMessageOpenedApp(RemoteMessage message) {
     // Navegar a la pantalla correspondiente basado en el mensaje
     // Esto se puede conectar con el router de la app
+  }
+
+  static void _handleNotificationTap(NotificationResponse response) {
+    final payload = response.payload;
+    if (payload != null && payload.isNotEmpty) {
+      navigatorKey.currentState?.pushNamed('/chat', arguments: payload);
+    }
   }
 }

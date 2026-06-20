@@ -35,6 +35,20 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     Timer(const Duration(milliseconds: 2500), () {
       _checkAuthState();
     });
+
+    // Timeout de respaldo de 6 segundos para evitar congelamiento
+    Timer(const Duration(milliseconds: 6000), () {
+      _handleTimeoutFallback();
+    });
+  }
+
+  void _handleTimeoutFallback() {
+    if (!mounted) return;
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    if (!authProvider.isInitChecked) {
+      debugPrint("Advertencia: El chequeo de autenticación tardó demasiado. Redirigiendo a Login por seguridad.");
+      Navigator.pushNamedAndRemoveUntil(context, AppRoutes.login, (route) => false);
+    }
   }
 
   void _checkAuthState() {

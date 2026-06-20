@@ -205,8 +205,9 @@ class RideInfoCard extends StatelessWidget {
                             Text(
                               'Bs. $bsFare',
                               style: const TextStyle(
-                                color: AppTheme.textGrey,
-                                fontSize: 13,
+                                color: AppTheme.primaryColor,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
                         ],

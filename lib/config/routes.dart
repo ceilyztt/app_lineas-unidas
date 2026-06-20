@@ -13,9 +13,11 @@ import '../screens/client/client_home_screen.dart';
 import '../screens/client/ride_in_progress_screen.dart';
 import '../screens/client/national_fares_screen.dart';
 import '../screens/client/city_ride_screen.dart';
+import '../screens/client/client_payment_screen.dart';
 // Conductor
 import '../screens/driver/driver_home_screen.dart';
 import '../screens/driver/pending_screen.dart'; // IMPORTANTE
+import '../screens/driver/driver_earnings_screen.dart';
 // Administración
 import '../screens/admin/admin_home_screen.dart'; // IMPORTANTE
 // Otros
@@ -27,6 +29,7 @@ import '../screens/history/ride_history_screen.dart';
 import '../screens/rating/rating_screen.dart';
 import '../screens/directory/drivers_directory_screen.dart';
 import '../screens/directory/driver_reviews_screen.dart';
+import '../screens/chat/chat_screen.dart';
 
 class AppRoutes {
   // Definición de nombres de rutas
@@ -55,6 +58,9 @@ class AppRoutes {
   // Nuevas rutas para el proyecto de grado
   static const String driverPending = '/driverPending';
   static const String adminHome = '/admin/home';
+  static const String chat = '/chat';
+  static const String payment = '/payment';
+  static const String driverEarnings = '/driver/earnings';
 
   static Map<String, WidgetBuilder> get routes {
     return {
@@ -77,12 +83,15 @@ class AppRoutes {
       editDriverProfile: (context) => const EditDriverProfileScreen(),
       rideHistory: (context) => const RideHistoryScreen(),
       rating: (context) => const RatingScreen(),
+      payment: (context) => const ClientPaymentScreen(),
       
       // Registro de las nuevas pantallas
       driverPending: (context) => const DriverPendingScreen(),
       adminHome: (context) => const AdminHomeScreen(),
       directory: (context) => const DriversDirectoryScreen(),
       driverReviews: (context) => const DriverReviewsScreen(),
+      chat: (context) => const ChatScreen(),
+      driverEarnings: (context) => const DriverEarningsScreen(),
     };
   }
 }
