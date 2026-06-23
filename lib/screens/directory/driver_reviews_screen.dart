@@ -33,15 +33,14 @@ class DriverReviewsScreen extends StatelessWidget {
             stream: FirebaseFirestore.instance
                 .collection('ratings')
                 .where('driverId', isEqualTo: driver.uid)
-                .orderBy('createdAt', descending: true)
                 .snapshots(),
             builder: (context, snapshot) {
               if (snapshot.hasError) return const SliverToBoxAdapter(child: Center(child: Text('Error al cargar reseñas', style: TextStyle(color: Colors.white))));
               if (snapshot.connectionState == ConnectionState.waiting) return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
 
-              final docs = snapshot.data!.docs;
+              final rawDocs = snapshot.data!.docs;
 
-              if (docs.isEmpty) {
+              if (rawDocs.isEmpty) {
                 return const SliverToBoxAdapter(
                   child: Padding(
                     padding: EdgeInsets.all(24.0),
@@ -49,6 +48,15 @@ class DriverReviewsScreen extends StatelessWidget {
                   ),
                 );
               }
+
+              // Ordenar localmente por fecha para evadir la necesidad de un Índice Compuesto en Firebase
+              final docs = rawDocs.toList();
+              docs.sort((a, b) {
+                final dateA = (a.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
+                final dateB = (b.data() as Map<String, dynamic>)['createdAt'] as Timestamp?;
+                if (dateA == null || dateB == null) return 0;
+                return dateB.compareTo(dateA); // Orden descendente (más reciente primero)
+              });
 
               return SliverList(
                 delegate: SliverChildBuilderDelegate(

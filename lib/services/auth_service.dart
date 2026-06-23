@@ -229,6 +229,7 @@ class AuthService {
   // Recuperar contraseña
   Future<void> resetPassword(String email) async {
     try {
+      _auth.setLanguageCode('es'); // Forzar idioma a Español
       await _auth.sendPasswordResetEmail(email: email);
     } on FirebaseAuthException catch (e) {
       throw _handleAuthError(e);

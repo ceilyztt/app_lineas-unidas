@@ -228,6 +228,16 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // Preguntarle a Firebase si este correo tiene métodos de inicio de sesión
+      final methods = await FirebaseAuth.instance.fetchSignInMethodsForEmail(email);
+      
+      if (methods.isEmpty) {
+        _error = 'Este correo electrónico no se encuentra registrado.';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
       await _authService.resetPassword(email);
       _isLoading = false;
       notifyListeners();

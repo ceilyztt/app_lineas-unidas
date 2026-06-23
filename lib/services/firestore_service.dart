@@ -134,7 +134,7 @@ class FirestoreService {
         .collection('rides')
         .where('driverId', isEqualTo: driverId)
         .where('status', isEqualTo: 'completed')
-        .snapshots()
+        .snapshots()
         .map((snapshot) => snapshot.docs
             .map((doc) => RideModel.fromMap(doc.data()))
             .toList());
@@ -146,14 +146,16 @@ class FirestoreService {
     final snapshot = await _firestore
         .collection('rides')
         .where(field, isEqualTo: userId)
-        .where('status', whereIn: ['completed', 'cancelled'])
-        .orderBy('createdAt', descending: true)
-        .limit(50)
+        .where('status', isEqualTo: 'completed')
         .get();
 
-    return snapshot.docs
+    final rides = snapshot.docs
         .map((doc) => RideModel.fromMap(doc.data()))
         .toList();
+        
+    // Ordenar localmente para evadir el Índice Compuesto
+    rides.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return rides.take(50).toList();
   }
 
   // ============ CALIFICACIONES ============
@@ -184,13 +186,14 @@ class FirestoreService {
     final snapshot = await _firestore
         .collection('ratings')
         .where('driverId', isEqualTo: driverId)
-        .orderBy('createdAt', descending: true)
-        .limit(20)
         .get();
 
-    return snapshot.docs
+    final ratings = snapshot.docs
         .map((doc) => RatingModel.fromMap(doc.data()))
         .toList();
+        
+    ratings.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return ratings.take(20).toList();
   }
 
   // ============ TARIFAS NACIONALES ============

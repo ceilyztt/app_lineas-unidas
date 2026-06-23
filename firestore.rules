@@ -34,8 +34,16 @@ service cloud.firestore {
     match /drivers/{driverId} {
       // Cualquiera puede leer la lista de conductores (Directorio)
       allow read: if isAuth();
-      // Solo el conductor dueño o un administrador pueden escribir/modificar
-      allow write: if isAuth() && (request.auth.uid == driverId || isAdmin());
+      
+      // Solo el conductor dueño o un administrador pueden crear o eliminar
+      allow create, delete: if isAuth() && (request.auth.uid == driverId || isAdmin());
+      
+      // Permitir actualización si es dueño, admin, o si SOLO está actualizando las calificaciones
+      allow update: if isAuth() && (
+        request.auth.uid == driverId || 
+        isAdmin() ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['avgRating', 'totalRatings'])
+      );
     }
 
     // Colección: Calificaciones

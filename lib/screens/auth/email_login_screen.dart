@@ -55,10 +55,16 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
         
         final isDriverPortal = expectedRole == 'driver';
         final mensajeError = isDriverPortal 
-            ? 'Este login es exclusivo para Conductores.' 
-            : 'Este login es exclusivo para Pasajeros.';
+            ? 'Este portal es exclusivo para Conductores. La cuenta ingresada pertenece a un Pasajero.' 
+            : 'Este portal es exclusivo para Pasajeros. La cuenta ingresada pertenece a un Conductor.';
             
         authProvider.setError(mensajeError);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(mensajeError),
+            backgroundColor: AppTheme.errorRed,
+          ),
+        );
         return;
       }
 

@@ -56,17 +56,29 @@ class _RatingScreenState extends State<RatingScreen> {
       createdAt: DateTime.now(),
     );
 
-    await firestoreService.createRating(rating);
-    rideProvider.clearRide();
+    try {
+      await firestoreService.createRating(rating);
+      rideProvider.clearRide();
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('¡Gracias por tu calificación!'),
-          backgroundColor: AppTheme.successGreen,
-        ),
-      );
-      Navigator.pushNamedAndRemoveUntil(context, AppRoutes.clientHome, (r) => false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('¡Gracias por tu calificación!'),
+            backgroundColor: AppTheme.successGreen,
+          ),
+        );
+        Navigator.pushNamedAndRemoveUntil(context, AppRoutes.clientHome, (r) => false);
+      }
+    } catch (e) {
+      setState(() => _isSubmitting = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Hubo un error al guardar la calificación. Intenta de nuevo.'),
+            backgroundColor: AppTheme.errorRed,
+          ),
+        );
+      }
     }
   }
 
