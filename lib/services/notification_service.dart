@@ -1,6 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:onesignal_flutter/onesignal_flutter.dart';
+import 'package:http/http.dart' as http;
 
 class NotificationService {
   // Patrón Singleton
@@ -12,7 +15,7 @@ class NotificationService {
   static bool isChatOpen = false;
   static String? activeRideId;
 
-  final FirebaseMessaging _messaging = FirebaseMessaging.instance;
+  FirebaseMessaging get _messaging => FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
 
@@ -78,6 +81,15 @@ class NotificationService {
       FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageOpenedApp);
     } catch (e) {
       debugPrint("Firebase Messaging listen error: $e");
+    }
+
+    // 5. Inicializar OneSignal de forma segura
+    try {
+      OneSignal.Debug.setLogLevel(OSLogLevel.verbose);
+      OneSignal.initialize("352cd696-af6e-4e40-9e75-0623b5b6314f");
+      OneSignal.Notifications.requestPermission(true);
+    } catch (e) {
+      debugPrint("OneSignal initialization error: $e");
     }
   }
 
@@ -168,6 +180,38 @@ class NotificationService {
     final payload = response.payload;
     if (payload != null && payload.isNotEmpty) {
       navigatorKey.currentState?.pushNamed('/chat', arguments: payload);
+    }
+  }
+
+  // Enviar notificación push usando la API REST de OneSignal
+  Future<void> sendPushNotification({
+    required String recipientId,
+    required String title,
+    required String body,
+    Map<String, dynamic>? data,
+  }) async {
+    final url = Uri.parse('https://onesignal.com/api/v1/notifications');
+    try {
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Basic 02d36bc6-f1c2-418d-a9f8-0b0c3bca08cf',
+        },
+        body: jsonEncode({
+          'app_id': '352cd696-af6e-4e40-9e75-0623b5b6314f',
+          'include_aliases': {
+            'external_id': [recipientId],
+          },
+          'target_channel': 'push',
+          'headings': {'es': title, 'en': title},
+          'contents': {'es': body, 'en': body},
+          'data': data,
+        }),
+      );
+      debugPrint("OneSignal REST API response status: ${response.statusCode}, body: ${response.body}");
+    } catch (e) {
+      debugPrint("Error sending push notification via OneSignal: $e");
     }
   }
 }

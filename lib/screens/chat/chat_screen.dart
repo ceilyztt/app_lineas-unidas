@@ -4,6 +4,7 @@ import '../../config/theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/firestore_service.dart';
 import '../../services/notification_service.dart';
+import '../../providers/ride_provider.dart';
 import '../../models/message_model.dart';
 import 'package:intl/intl.dart';
 
@@ -47,6 +48,15 @@ class _ChatScreenState extends State<ChatScreen> {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final userId = authProvider.firebaseUser!.uid;
 
+    String? recipientId;
+    try {
+      final rideProvider = Provider.of<RideProvider>(context, listen: false);
+      final ride = rideProvider.currentRide;
+      if (ride != null) {
+        recipientId = (userId == ride.clientId) ? ride.driverId : ride.clientId;
+      }
+    } catch (_) {}
+
     final message = MessageModel(
       id: '', // Firestore genera el ID
       senderId: userId,
@@ -56,6 +66,19 @@ class _ChatScreenState extends State<ChatScreen> {
 
     _messageController.clear();
     await _firestoreService.sendMessage(_rideId, message);
+
+    if (recipientId != null) {
+      try {
+        NotificationService().sendPushNotification(
+          recipientId: recipientId,
+          title: 'Mensaje de chat 💬',
+          body: text,
+          data: {'rideId': _rideId},
+        );
+      } catch (e) {
+        debugPrint("Error sending chat push: $e");
+      }
+    }
   }
 
   @override

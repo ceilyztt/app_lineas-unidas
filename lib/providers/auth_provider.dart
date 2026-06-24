@@ -6,6 +6,7 @@ import '../models/user_model.dart';
 import '../models/driver_model.dart';
 import '../services/auth_service.dart';
 import '../services/notification_service.dart';
+import 'package:onesignal_flutter/onesignal_flutter.dart';
 
 class AuthProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
@@ -59,6 +60,14 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> _updateFcmToken(String uid) async {
+    try {
+      // Iniciar sesión en OneSignal asociando el UID del usuario
+      OneSignal.login(uid);
+      debugPrint("Usuario registrado en OneSignal: $uid");
+    } catch (e) {
+      debugPrint("Error al registrar usuario en OneSignal: $e");
+    }
+
     try {
       final token = await NotificationService().getToken();
       if (token != null) {
@@ -247,6 +256,13 @@ class AuthProvider extends ChangeNotifier {
       } catch (e) {
         debugPrint('Error al actualizar disponibilidad al cerrar sesión: $e');
       }
+    }
+
+    try {
+      OneSignal.logout();
+      debugPrint("Sesión cerrada en OneSignal");
+    } catch (e) {
+      debugPrint("Error al cerrar sesión en OneSignal: $e");
     }
 
     await _authService.signOut();

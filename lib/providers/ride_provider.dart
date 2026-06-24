@@ -150,6 +150,15 @@ class RideProvider extends ChangeNotifier {
       });
 
       _assignedDriver = nearestDriver;
+
+      // Enviar push notification al conductor asignado
+      _notificationService.sendPushNotification(
+        recipientId: nearestDriver.uid,
+        title: '¡Nueva solicitud de carrera! 🚕',
+        body: '${ride.clientName} ha solicitado un taxi.',
+        data: {'rideId': ride.rideId},
+      );
+
       return true;
     }
     
@@ -289,6 +298,14 @@ class RideProvider extends ChangeNotifier {
         body: body,
         payload: ride.rideId,
       );
+
+      // Enviar push notification al pasajero (cliente)
+      _notificationService.sendPushNotification(
+        recipientId: ride.clientId,
+        title: title,
+        body: body,
+        data: {'rideId': ride.rideId},
+      );
     }
   }
 
@@ -366,6 +383,14 @@ class RideProvider extends ChangeNotifier {
           'rejectedDrivers': rejectedList,
           'rejectedDriverNames': rejectedNamesList,
         });
+
+        // Enviar push notification al nuevo conductor asignado
+        _notificationService.sendPushNotification(
+          recipientId: nearestDriver.uid,
+          title: '¡Nueva solicitud de carrera! 🚕',
+          body: '${ride.clientName} ha solicitado un taxi.',
+          data: {'rideId': rideId},
+        );
       } else {
         // En caso extremo, cancelar en un solo update
         _error = 'No pudimos asignar un conductor a tu viaje.';

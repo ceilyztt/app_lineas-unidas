@@ -19,13 +19,15 @@ void main() async {
         storageBucket: 'lineas-unidas.appspot.com',
       ),
     );
-    
-    // Inicializar servicio de notificaciones
+  } catch (e) {
+    debugPrint("Advertencia - Error inicializando Firebase: $e");
+  }
+
+  try {
+    // Inicializar servicio de notificaciones (incluye OneSignal)
     await NotificationService().initialize();
   } catch (e) {
-    debugPrint("Advertencia - Error inicializando Firebase o Notificaciones: $e");
-    // Lo envolvemos en un try-catch para que la app no crashee en el emulador
-    // si las credenciales aún son "TU_API_KEY_AQUI", así al menos podrás ver la UI.
+    debugPrint("Advertencia - Error inicializando Servicio de Notificaciones: $e");
   }
 
   // Lanzamos la aplicación completa (definida en lib/app.dart)
