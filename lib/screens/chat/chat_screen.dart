@@ -25,6 +25,11 @@ class _ChatScreenState extends State<ChatScreen> {
     _rideId = ModalRoute.of(context)!.settings.arguments as String;
     NotificationService.isChatOpen = true;
     NotificationService.activeRideId = _rideId;
+    
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    if (authProvider.firebaseUser != null) {
+      _firestoreService.markChatAsRead(_rideId, authProvider.firebaseUser!.uid);
+    }
   }
 
   @override
@@ -86,6 +91,13 @@ class _ChatScreenState extends State<ChatScreen> {
                 }
 
                 final messages = snapshot.data!;
+
+                // Marcar como leídos en tiempo real al recibir nuevos mensajes
+                if (messages.isNotEmpty && messages.last.senderId != currentUserId) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _firestoreService.markChatAsRead(_rideId, currentUserId);
+                  });
+                }
 
                 return ListView.builder(
                   padding: const EdgeInsets.all(16),

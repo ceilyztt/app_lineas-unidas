@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
 import '../models/driver_model.dart';
 import '../services/auth_service.dart';
+import '../services/notification_service.dart';
 
 class AuthProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
@@ -53,6 +54,33 @@ class AuthProvider extends ChangeNotifier {
     _userModel = await _authService.getUserData(uid);
     if (_userModel?.role == 'driver') {
       _driverModel = await _authService.getDriverData(uid);
+    }
+    _updateFcmToken(uid);
+  }
+
+  Future<void> _updateFcmToken(String uid) async {
+    try {
+      final token = await NotificationService().getToken();
+      if (token != null) {
+        // Guardar token en colección general 'users'
+        await FirebaseFirestore.instance.collection('users').doc(uid).set({
+          'fcmToken': token,
+        }, SetOptions(merge: true));
+
+        // Si es conductor, guardar también en la colección 'drivers'
+        if (_userModel?.role == 'driver') {
+          await FirebaseFirestore.instance.collection('drivers').doc(uid).set({
+            'fcmToken': token,
+          }, SetOptions(merge: true));
+          
+          if (_driverModel != null) {
+            _driverModel = _driverModel!.copyWith(fcmToken: token);
+          }
+        }
+        debugPrint("Token FCM actualizado con éxito en Firestore: $token");
+      }
+    } catch (e) {
+      debugPrint("Error al actualizar Token FCM: $e");
     }
   }
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../config/theme.dart';
@@ -5,6 +6,9 @@ import '../../config/routes.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/currency_provider.dart';
 import '../../providers/location_provider.dart';
+import '../../providers/ride_provider.dart';
+import '../../models/ride_model.dart';
+import '../../services/firestore_service.dart';
 
 class ClientHomeScreen extends StatefulWidget {
   const ClientHomeScreen({super.key});
@@ -15,6 +19,7 @@ class ClientHomeScreen extends StatefulWidget {
 
 class _ClientHomeScreenState extends State<ClientHomeScreen> {
   int _selectedIndex = 0;
+  StreamSubscription<List<RideModel>>? _activeRideSubscription;
 
   @override
   void initState() {
@@ -22,7 +27,50 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<LocationProvider>(context, listen: false)
           .checkAndPromptGPSAndPermissions(context);
+      _setupActiveRideListener();
     });
+  }
+
+  void _setupActiveRideListener() {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final uid = authProvider.firebaseUser?.uid;
+    if (uid != null) {
+      final firestoreService = FirestoreService();
+      _activeRideSubscription = firestoreService.streamClientActiveRides(uid).listen((activeRides) {
+        if (!mounted) return;
+        
+        final isCurrent = ModalRoute.of(context)?.isCurrent ?? false;
+        if (!isCurrent) return;
+
+        if (activeRides.isNotEmpty) {
+          final activeRide = activeRides.first;
+          
+          final rideProvider = Provider.of<RideProvider>(context, listen: false);
+          rideProvider.listenToRide(activeRide.rideId);
+
+          if (activeRide.status == RideStatus.completed) {
+            if (activeRide.paymentStatus != 'confirmed') {
+              Navigator.pushReplacementNamed(
+                context,
+                AppRoutes.payment,
+                arguments: activeRide,
+              );
+            }
+          } else {
+            Navigator.pushReplacementNamed(
+              context,
+              AppRoutes.rideInProgress,
+            );
+          }
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _activeRideSubscription?.cancel();
+    super.dispose();
   }
 
   @override

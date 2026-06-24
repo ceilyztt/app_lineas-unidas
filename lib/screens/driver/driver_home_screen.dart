@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:geolocator/geolocator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import 'package:provider/provider.dart';
@@ -49,17 +50,47 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     }
   }
 
-  void _loadRouteForRide(RideModel ride) async {
-    if (_currentRideIdForRoute == ride.rideId || ride.dropoffLocation == null) {
+  Position? _lastRouteDriverPosition;
+
+  void _loadRouteForRide(RideModel ride, Position? driverPos) async {
+    if (driverPos == null) return;
+
+    LatLng start;
+    LatLng end;
+
+    final isGoingToPickup = ride.status == RideStatus.requested ||
+                            ride.status == RideStatus.accepted ||
+                            ride.status == RideStatus.driverOnWay;
+
+    if (isGoingToPickup) {
+      start = LatLng(driverPos.latitude, driverPos.longitude);
+      end = LatLng(ride.pickupLocation.latitude, ride.pickupLocation.longitude);
+    } else if (ride.status == RideStatus.inProgress && ride.dropoffLocation != null) {
+      start = LatLng(driverPos.latitude, driverPos.longitude);
+      end = LatLng(ride.dropoffLocation!.latitude, ride.dropoffLocation!.longitude);
+    } else {
+      _clearRoute();
       return;
     }
+
+    final distanceMoved = _lastRouteDriverPosition != null
+        ? Geolocator.distanceBetween(
+            _lastRouteDriverPosition!.latitude,
+            _lastRouteDriverPosition!.longitude,
+            driverPos.latitude,
+            driverPos.longitude,
+          )
+        : double.infinity;
+
+    if (_currentRideIdForRoute == ride.rideId && distanceMoved < 50) {
+      return;
+    }
+
     _currentRideIdForRoute = ride.rideId;
-    
-    final result = await RoutingService.getRoute(
-      LatLng(ride.pickupLocation.latitude, ride.pickupLocation.longitude),
-      LatLng(ride.dropoffLocation!.latitude, ride.dropoffLocation!.longitude),
-    );
-    
+    _lastRouteDriverPosition = driverPos;
+
+    final result = await RoutingService.getRoute(start, end);
+
     if (result != null && mounted) {
       setState(() {
         _routePoints = result.points;
@@ -86,6 +117,74 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     final driverProvider = Provider.of<DriverProvider>(context);
     final locationProvider = Provider.of<LocationProvider>(context);
     final driver = driverProvider.driver;
+
+    if (driver != null && driver.isSuspended) {
+      if (locationProvider.isTracking) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          locationProvider.stopTracking();
+        });
+      }
+      return Scaffold(
+        backgroundColor: AppTheme.backgroundColor,
+        body: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.block,
+                  size: 80,
+                  color: AppTheme.errorRed,
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'CUENTA SUSPENDIDA',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: AppTheme.textWhite,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Tu cuenta de conductor ha sido suspendida temporalmente por la administración.\n\nMotivo de la suspensión:\n"${driver.suspensionReason ?? 'No especificado'}"\n\nComunícate con la oficina de Líneas Unidas para resolver tu situación.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: AppTheme.textGrey,
+                    fontSize: 16,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 48),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.surfaceColor,
+                    foregroundColor: AppTheme.textWhite,
+                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: () async {
+                    await authProvider.signOut();
+                    if (context.mounted) {
+                      Navigator.pushNamedAndRemoveUntil(context, AppRoutes.login, (r) => false);
+                    }
+                  },
+                  child: const Text(
+                    'Cerrar Sesión',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                )
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     if (driver != null && driver.isApproved && driver.isAvailable && !locationProvider.isTracking) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -256,6 +355,95 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             },
           ),
 
+          // Solicitudes pendientes o Viaje Activo
+          Consumer<DriverProvider>(
+            builder: (context, driverProvider, _) {
+              if (driverProvider.driver?.isAvailable != true) {
+                _clearRoute();
+                return const SizedBox.shrink();
+              }
+
+              final uid = authProvider.firebaseUser!.uid;
+
+              // Primero: escuchar viajes activos
+              return StreamBuilder<List<RideModel>>(
+                stream: _firestoreService.streamDriverActiveRides(uid),
+                builder: (context, activeSnapshot) {
+                  final activeRides = activeSnapshot.data ?? [];
+
+                  if (activeRides.isNotEmpty) {
+                    final activeRide = activeRides.first;
+                    _loadRouteForRide(activeRide, locationProvider.currentPosition);
+
+                    // Asegurar que el proveedor del viaje escuche el viaje activo para recibir mensajes y notificaciones
+                    final rideProvider = Provider.of<RideProvider>(context, listen: false);
+                    if (rideProvider.currentRide?.rideId != activeRide.rideId) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        rideProvider.listenToRide(activeRide.rideId);
+                      });
+                    }
+
+                    return Container(
+                      padding: const EdgeInsets.all(16),
+                      color: AppTheme.backgroundColor,
+                      child: ActiveRideCard(ride: activeRide),
+                    );
+                  } else {
+                    // Si no hay viaje activo, limpiar la escucha en el proveedor del viaje
+                    final rideProvider = Provider.of<RideProvider>(context, listen: false);
+                    if (rideProvider.currentRide != null) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        rideProvider.clearRide();
+                      });
+                    }
+                  }
+
+                  // Segundo: si no hay viaje activo, escuchar pendientes
+                  return StreamBuilder<List<RideModel>>(
+                    stream: _firestoreService.streamPendingRideRequests(uid),
+                    builder: (context, pendingSnapshot) {
+                      if (!pendingSnapshot.hasData || pendingSnapshot.data!.isEmpty) {
+                        _clearRoute();
+                        return Container(
+                          padding: const EdgeInsets.all(16),
+                          child: const Text(
+                            'Esperando solicitudes...',
+                            style: TextStyle(color: AppTheme.textGrey),
+                            textAlign: TextAlign.center,
+                          ),
+                        );
+                      }
+
+                      final pendingRides = pendingSnapshot.data!;
+
+                      if (pendingRides.isEmpty) {
+                        _clearRoute();
+                        return Container(
+                          padding: const EdgeInsets.all(16),
+                          child: const Text(
+                            'Sin solicitudes pendientes',
+                            style: TextStyle(color: AppTheme.textGrey),
+                            textAlign: TextAlign.center,
+                          ),
+                        );
+                      }
+
+                      final pendingRide = pendingRides.first;
+                      _loadRouteForRide(pendingRide, locationProvider.currentPosition);
+
+                      return Container(
+                        padding: const EdgeInsets.all(16),
+                        color: AppTheme.backgroundColor,
+                        child: RideRequestCard(ride: pendingRide),
+                      );
+                    },
+                  );
+                },
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+
           // Imagen del Equipo
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -296,114 +484,51 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           ),
           const SizedBox(height: 16),
 
-          // Solicitudes pendientes o Viaje Activo
-          Consumer<DriverProvider>(
-            builder: (context, driverProvider, _) {
-              if (driverProvider.driver?.isAvailable != true) {
-                _clearRoute();
-                return const SizedBox.shrink();
-              }
-
-              final uid = authProvider.firebaseUser!.uid;
-
-              // Primero: escuchar viajes activos
-              return StreamBuilder<List<RideModel>>(
-                stream: _firestoreService.streamDriverActiveRides(uid),
-                builder: (context, activeSnapshot) {
-                  final activeRides = activeSnapshot.data ?? [];
-
-                  if (activeRides.isNotEmpty) {
-                    final activeRide = activeRides.first;
-                    _loadRouteForRide(activeRide);
-
-                    return Container(
-                      padding: const EdgeInsets.all(16),
-                      color: AppTheme.backgroundColor,
-                      child: ActiveRideCard(ride: activeRide),
-                    );
-                  }
-
-                  // Segundo: si no hay viaje activo, escuchar pendientes
-                  return StreamBuilder<List<RideModel>>(
-                    stream: _firestoreService.streamPendingRideRequests(uid),
-                    builder: (context, pendingSnapshot) {
-                      if (!pendingSnapshot.hasData || pendingSnapshot.data!.isEmpty) {
-                        _clearRoute();
-                        return Container(
-                          padding: const EdgeInsets.all(16),
-                          child: const Text(
-                            'Esperando solicitudes...',
-                            style: TextStyle(color: AppTheme.textGrey),
-                            textAlign: TextAlign.center,
-                          ),
-                        );
-                      }
-
-                      final pendingRides = pendingSnapshot.data!;
-
-                      if (pendingRides.isEmpty) {
-                        _clearRoute();
-                        return Container(
-                          padding: const EdgeInsets.all(16),
-                          child: const Text(
-                            'Sin solicitudes pendientes',
-                            style: TextStyle(color: AppTheme.textGrey),
-                            textAlign: TextAlign.center,
-                          ),
-                        );
-                      }
-
-                      final pendingRide = pendingRides.first;
-                      _loadRouteForRide(pendingRide);
-
-                      return Container(
-                        padding: const EdgeInsets.all(16),
-                        color: AppTheme.backgroundColor,
-                        child: RideRequestCard(ride: pendingRide),
-                      );
-                    },
-                  );
-                },
-              );
-            },
-          ),
-          const SizedBox(height: 16),
-
           // Mapa
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: SizedBox(
-              height: 300, // Altura reducida para que sea más pequeño
+              height: 300,
               child: Consumer<LocationProvider>(
                 builder: (context, locationProvider, _) {
-                  if (locationProvider.currentPosition != null) {
-                    return ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                    child: FlutterMap(
-                      options: MapOptions(
-                        initialCenter: LatLng(
-                          locationProvider.currentPosition!.latitude,
-                          locationProvider.currentPosition!.longitude,
-                        ),
-                        initialZoom: 15.0,
-                      ),
-                      children: [
-                        TileLayer(
-                          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                          userAgentPackageName: 'com.lineasunidas.app',
-                        ),
-                        if (_routePoints.isNotEmpty)
-                          PolylineLayer(
-                            polylines: [
-                              Polyline(
-                                points: _routePoints,
-                                strokeWidth: 4.0,
-                                color: AppTheme.primaryColor,
-                              ),
-                            ],
+                  if (locationProvider.currentPosition == null) {
+                    return const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          CircularProgressIndicator(
+                            color: AppTheme.primaryColor,
                           ),
-                        MarkerLayer(
-                          markers: [
+                          SizedBox(height: 16),
+                          Text(
+                            'Obteniendo ubicación...',
+                            style: TextStyle(color: AppTheme.textGrey),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  final uid = authProvider.firebaseUser!.uid;
+
+                  return StreamBuilder<List<RideModel>>(
+                    stream: _firestoreService.streamDriverActiveRides(uid),
+                    builder: (context, activeSnapshot) {
+                      final activeRides = activeSnapshot.data ?? [];
+
+                      return StreamBuilder<List<RideModel>>(
+                        stream: _firestoreService.streamPendingRideRequests(uid),
+                        builder: (context, pendingSnapshot) {
+                          final pendingRides = pendingSnapshot.data ?? [];
+
+                          RideModel? currentRide;
+                          if (activeRides.isNotEmpty) {
+                            currentRide = activeRides.first;
+                          } else if (pendingRides.isNotEmpty) {
+                            currentRide = pendingRides.first;
+                          }
+
+                          final markers = <Marker>[
                             Marker(
                               point: LatLng(
                                 locationProvider.currentPosition!.latitude,
@@ -423,30 +548,84 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                 ),
                               ),
                             ),
-                          ],
-                        ),
-                      ],
-                    ),
+                          ];
+
+                          if (currentRide != null) {
+                            // Marcador de recogida
+                            markers.add(
+                              Marker(
+                                point: LatLng(
+                                  currentRide.pickupLocation.latitude,
+                                  currentRide.pickupLocation.longitude,
+                                ),
+                                width: 40,
+                                height: 40,
+                                child: const Icon(
+                                  Icons.person_pin_circle,
+                                  color: AppTheme.successGreen,
+                                  size: 36,
+                                ),
+                              ),
+                            );
+
+                            // Marcador de destino si está disponible
+                            if (currentRide.dropoffLocation != null) {
+                              markers.add(
+                                Marker(
+                                  point: LatLng(
+                                    currentRide.dropoffLocation!.latitude,
+                                    currentRide.dropoffLocation!.longitude,
+                                  ),
+                                  width: 40,
+                                  height: 40,
+                                  child: const Icon(
+                                    Icons.location_on,
+                                    color: AppTheme.errorRed,
+                                    size: 36,
+                                  ),
+                                ),
+                              );
+                            }
+                          }
+
+                          return ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: FlutterMap(
+                              options: MapOptions(
+                                initialCenter: LatLng(
+                                  locationProvider.currentPosition!.latitude,
+                                  locationProvider.currentPosition!.longitude,
+                                ),
+                                initialZoom: 15.0,
+                              ),
+                              children: [
+                                TileLayer(
+                                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                  userAgentPackageName: 'com.lineasunidas.app',
+                                ),
+                                if (_routePoints.isNotEmpty && currentRide != null)
+                                  PolylineLayer(
+                                    polylines: [
+                                      Polyline(
+                                        points: _routePoints,
+                                        strokeWidth: 4.0,
+                                        color: AppTheme.primaryColor,
+                                      ),
+                                    ],
+                                  ),
+                                MarkerLayer(
+                                  markers: markers,
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      );
+                    },
                   );
-                }
-                return const Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      CircularProgressIndicator(
-                        color: AppTheme.primaryColor,
-                      ),
-                      SizedBox(height: 16),
-                      Text(
-                        'Obteniendo ubicación...',
-                        style: TextStyle(color: AppTheme.textGrey),
-                      ),
-                    ],
-                  ),
-                );
-              },
+                },
+              ),
             ),
-          ),
           ),
           const SizedBox(height: 20),
         ],
@@ -1017,6 +1196,7 @@ class ActiveRideCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final rideProvider = Provider.of<RideProvider>(context, listen: false);
+    final firestoreService = FirestoreService();
     
     String statusText = '';
     Color statusColor = AppTheme.primaryColor;
@@ -1195,17 +1375,33 @@ class ActiveRideCard extends StatelessWidget {
             const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.pushNamed(context, AppRoutes.chat, arguments: ride.rideId);
-                },
-                icon: const Icon(Icons.chat),
-                label: const Text('CHAT CON PASAJERO'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryColor,
-                  foregroundColor: AppTheme.backgroundColor,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+              child: StreamBuilder<int>(
+                stream: firestoreService.streamUnreadMessagesCount(
+                  ride.rideId,
+                  Provider.of<AuthProvider>(context, listen: false).firebaseUser?.uid ?? '',
                 ),
+                builder: (context, unreadSnapshot) {
+                  final count = unreadSnapshot.data ?? 0;
+                  return ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pushNamed(context, AppRoutes.chat, arguments: ride.rideId);
+                    },
+                    icon: count > 0
+                        ? Badge(
+                            label: Text('$count'),
+                            backgroundColor: AppTheme.errorRed,
+                            textColor: Colors.white,
+                            child: const Icon(Icons.chat),
+                          )
+                        : const Icon(Icons.chat),
+                    label: const Text('CHAT CON PASAJERO'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primaryColor,
+                      foregroundColor: AppTheme.backgroundColor,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  );
+                },
               ),
             ),
             

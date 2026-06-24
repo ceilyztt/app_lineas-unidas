@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -7,7 +8,8 @@ import '../../config/theme.dart';
 import '../../config/routes.dart';
 import '../../providers/ride_provider.dart';
 import '../../providers/location_provider.dart';
-import '../../providers/location_provider.dart';
+import '../../providers/auth_provider.dart';
+import '../../services/firestore_service.dart';
 import '../../models/ride_model.dart';
 import '../widgets/ride_info_card.dart';
 import '../widgets/panic_button_widget.dart';
@@ -20,9 +22,11 @@ class RideInProgressScreen extends StatefulWidget {
 }
 
 class _RideInProgressScreenState extends State<RideInProgressScreen> {
+  final FirestoreService _firestoreService = FirestoreService();
   List<LatLng> _routePoints = [];
   bool _isLoadingRoute = false;
   String? _lastDriverId;
+  LatLng? _lastDriverRoutePos;
   String _getStatusMessage(RideStatus status) {
     switch (status) {
       case RideStatus.requested:
@@ -59,14 +63,22 @@ class _RideInProgressScreenState extends State<RideInProgressScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async {
+    final rideProvider = Provider.of<RideProvider>(context);
+    final rideObj = rideProvider.currentRide;
+
+    return PopScope(
+      canPop: rideObj == null || rideObj.status == RideStatus.cancelled,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        
         final rideProvider = Provider.of<RideProvider>(context, listen: false);
         final ride = rideProvider.currentRide;
         if (ride != null && (ride.status == RideStatus.requested || ride.status == RideStatus.accepted)) {
           await rideProvider.cancelRide(ride.rideId);
+          if (context.mounted) {
+            Navigator.of(context).pop();
+          }
         }
-        return true;
       },
       child: Scaffold(
         body: Consumer<RideProvider>(
@@ -82,15 +94,47 @@ class _RideInProgressScreenState extends State<RideInProgressScreen> {
             );
           }
 
-          // Cargar ruta si hay conductor asignado y aún no se ha cargado
+          // Cargar ruta si hay conductor asignado y aún no se ha cargado (o se movió significativamente)
           final driver = rideProvider.assignedDriver;
-          if (driver != null && driver.location != null && ride.status == RideStatus.driverOnWay) {
-            if (_lastDriverId != driver.uid) {
-              _lastDriverId = driver.uid;
-              _loadRoute(
-                LatLng(driver.location!.latitude, driver.location!.longitude),
-                LatLng(ride.pickupLocation.latitude, ride.pickupLocation.longitude),
-              );
+          if (driver != null && driver.location != null) {
+            final driverPos = LatLng(driver.location!.latitude, driver.location!.longitude);
+            
+            if (ride.status == RideStatus.driverOnWay) {
+              final distanceMoved = _lastDriverRoutePos != null
+                  ? Geolocator.distanceBetween(
+                      _lastDriverRoutePos!.latitude,
+                      _lastDriverRoutePos!.longitude,
+                      driverPos.latitude,
+                      driverPos.longitude,
+                    )
+                  : double.infinity;
+
+              if (_lastDriverId != driver.uid || distanceMoved > 50) {
+                _lastDriverId = driver.uid;
+                _lastDriverRoutePos = driverPos;
+                _loadRoute(
+                  driverPos,
+                  LatLng(ride.pickupLocation.latitude, ride.pickupLocation.longitude),
+                );
+              }
+            } else if (ride.status == RideStatus.inProgress && ride.dropoffLocation != null) {
+              final distanceMoved = _lastDriverRoutePos != null
+                  ? Geolocator.distanceBetween(
+                      _lastDriverRoutePos!.latitude,
+                      _lastDriverRoutePos!.longitude,
+                      driverPos.latitude,
+                      driverPos.longitude,
+                    )
+                  : double.infinity;
+
+              if (_lastDriverId != driver.uid || distanceMoved > 50) {
+                _lastDriverId = driver.uid;
+                _lastDriverRoutePos = driverPos;
+                _loadRoute(
+                  driverPos,
+                  LatLng(ride.dropoffLocation!.latitude, ride.dropoffLocation!.longitude),
+                );
+              }
             }
           }
 
@@ -315,17 +359,33 @@ class _RideInProgressScreenState extends State<RideInProgressScreen> {
                           padding: const EdgeInsets.only(bottom: 12),
                           child: SizedBox(
                             width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: () {
-                                Navigator.pushNamed(context, AppRoutes.chat, arguments: ride.rideId);
-                              },
-                              icon: const Icon(Icons.chat),
-                              label: const Text('CHAT CON CONDUCTOR'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppTheme.primaryColor,
-                                foregroundColor: AppTheme.backgroundColor,
-                                padding: const EdgeInsets.symmetric(vertical: 14),
+                            child: StreamBuilder<int>(
+                              stream: _firestoreService.streamUnreadMessagesCount(
+                                ride.rideId,
+                                Provider.of<AuthProvider>(context, listen: false).firebaseUser?.uid ?? '',
                               ),
+                              builder: (context, unreadSnapshot) {
+                                final count = unreadSnapshot.data ?? 0;
+                                return ElevatedButton.icon(
+                                  onPressed: () {
+                                    Navigator.pushNamed(context, AppRoutes.chat, arguments: ride.rideId);
+                                  },
+                                  icon: count > 0
+                                      ? Badge(
+                                          label: Text('$count'),
+                                          backgroundColor: AppTheme.errorRed,
+                                          textColor: Colors.white,
+                                          child: const Icon(Icons.chat),
+                                        )
+                                      : const Icon(Icons.chat),
+                                  label: const Text('CHAT CON CONDUCTOR'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppTheme.primaryColor,
+                                    foregroundColor: AppTheme.backgroundColor,
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                  ),
+                                );
+                              },
                             ),
                           ),
                         ),
@@ -419,6 +479,25 @@ class _RideInProgressScreenState extends State<RideInProgressScreen> {
               color: AppTheme.primaryColor,
               size: 24,
             ),
+          ),
+        ),
+      );
+    }
+
+    // Marcador de destino
+    if (ride.dropoffLocation != null) {
+      markers.add(
+        Marker(
+          point: LatLng(
+            ride.dropoffLocation!.latitude,
+            ride.dropoffLocation!.longitude,
+          ),
+          width: 40,
+          height: 40,
+          child: const Icon(
+            Icons.location_on,
+            color: AppTheme.errorRed,
+            size: 40,
           ),
         ),
       );

@@ -30,6 +30,8 @@ class RideModel {
   final String? paymentMethod;
   final String? paymentStatus;
   final Map<String, dynamic>? paymentDetails;
+  final DateTime? clientLastReadChat;
+  final DateTime? driverLastReadChat;
 
   RideModel({
     required this.rideId,
@@ -52,6 +54,8 @@ class RideModel {
     this.paymentMethod,
     this.paymentStatus,
     this.paymentDetails,
+    this.clientLastReadChat,
+    this.driverLastReadChat,
   });
 
   Map<String, dynamic> toMap() {
@@ -76,6 +80,8 @@ class RideModel {
       'paymentMethod': paymentMethod,
       'paymentStatus': paymentStatus,
       'paymentDetails': paymentDetails,
+      'clientLastReadChat': clientLastReadChat != null ? Timestamp.fromDate(clientLastReadChat!) : null,
+      'driverLastReadChat': driverLastReadChat != null ? Timestamp.fromDate(driverLastReadChat!) : null,
     };
   }
 
@@ -104,6 +110,8 @@ class RideModel {
       paymentMethod: map['paymentMethod'],
       paymentStatus: map['paymentStatus'],
       paymentDetails: map['paymentDetails'] != null ? Map<String, dynamic>.from(map['paymentDetails']) : null,
+      clientLastReadChat: (map['clientLastReadChat'] as Timestamp?)?.toDate(),
+      driverLastReadChat: (map['driverLastReadChat'] as Timestamp?)?.toDate(),
     );
   }
 
@@ -128,6 +136,8 @@ class RideModel {
     String? paymentMethod,
     String? paymentStatus,
     Map<String, dynamic>? paymentDetails,
+    DateTime? clientLastReadChat,
+    DateTime? driverLastReadChat,
   }) {
     return RideModel(
       rideId: rideId ?? this.rideId,
@@ -150,6 +160,8 @@ class RideModel {
       paymentMethod: paymentMethod ?? this.paymentMethod,
       paymentStatus: paymentStatus ?? this.paymentStatus,
       paymentDetails: paymentDetails ?? this.paymentDetails,
+      clientLastReadChat: clientLastReadChat ?? this.clientLastReadChat,
+      driverLastReadChat: driverLastReadChat ?? this.driverLastReadChat,
     );
   }
 }

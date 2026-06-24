@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'api_upload_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
@@ -52,6 +54,7 @@ class FirestoreService {
 
     return snapshot.docs
         .map((doc) => DriverModel.fromMap(doc.data()))
+        .where((d) => d.isSuspended != true)
         .toList();
   }
 
@@ -134,7 +137,7 @@ class FirestoreService {
         .collection('rides')
         .where('driverId', isEqualTo: driverId)
         .where('status', isEqualTo: 'completed')
-        .snapshots()
+        .snapshots()
         .map((snapshot) => snapshot.docs
             .map((doc) => RideModel.fromMap(doc.data()))
             .toList());
@@ -253,6 +256,98 @@ class FirestoreService {
           .map((doc) => MessageModel.fromMap(doc.data(), doc.id))
           .toList();
     });
+  }
+
+  Stream<int> streamUnreadMessagesCount(String rideId, String currentUserId) {
+    late StreamController<int> controller;
+    StreamSubscription? rideSub;
+    StreamSubscription? msgSub;
+
+    controller = StreamController<int>(
+      onListen: () {
+        void update() async {
+          try {
+            final rideSnap = await _firestore.collection('rides').doc(rideId).get();
+            if (!rideSnap.exists) {
+              if (!controller.isClosed) controller.add(0);
+              return;
+            }
+            final rideData = rideSnap.data() ?? {};
+            final clientId = rideData['clientId'];
+            final driverId = rideData['driverId'];
+            
+            DateTime? lastRead;
+            if (currentUserId == clientId) {
+              final ts = rideData['clientLastReadChat'] as Timestamp?;
+              lastRead = ts?.toDate();
+            } else if (currentUserId == driverId) {
+              final ts = rideData['driverLastReadChat'] as Timestamp?;
+              lastRead = ts?.toDate();
+            }
+
+            final messagesSnap = await _firestore
+                .collection('rides')
+                .doc(rideId)
+                .collection('messages')
+                .get();
+
+            final count = messagesSnap.docs.where((doc) {
+              final data = doc.data();
+              final senderId = data['senderId'] ?? '';
+              if (senderId == currentUserId) return false;
+              if (lastRead == null) return true;
+              
+              final timestampTs = data['timestamp'] as Timestamp?;
+              final timestamp = timestampTs?.toDate() ?? DateTime.now();
+              return timestamp.isAfter(lastRead);
+            }).length;
+
+            if (!controller.isClosed) {
+              controller.add(count);
+            }
+          } catch (e) {
+            debugPrint("Error updating unread count: $e");
+          }
+        }
+
+        // Escuchar cambios del viaje y de los mensajes
+        rideSub = _firestore.collection('rides').doc(rideId).snapshots().listen((_) => update());
+        msgSub = _firestore.collection('rides').doc(rideId).collection('messages').snapshots().listen((_) => update());
+        
+        // Ejecución inicial rápida
+        update();
+      },
+      onCancel: () {
+        rideSub?.cancel();
+        msgSub?.cancel();
+      },
+    );
+
+    return controller.stream;
+  }
+
+  Future<void> markChatAsRead(String rideId, String userId) async {
+    try {
+      final rideDoc = await _firestore.collection('rides').doc(rideId).get();
+      if (rideDoc.exists) {
+        final data = rideDoc.data();
+        if (data != null) {
+          final clientId = data['clientId'];
+          final driverId = data['driverId'];
+          if (userId == clientId) {
+            await _firestore.collection('rides').doc(rideId).update({
+              'clientLastReadChat': FieldValue.serverTimestamp(),
+            });
+          } else if (userId == driverId) {
+            await _firestore.collection('rides').doc(rideId).update({
+              'driverLastReadChat': FieldValue.serverTimestamp(),
+            });
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Error marking chat as read: $e");
+    }
   }
 
   // Subir captura de pago móvil a Firebase Storage

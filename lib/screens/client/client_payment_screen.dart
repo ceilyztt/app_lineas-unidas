@@ -429,153 +429,156 @@ class _ClientPaymentScreenState extends State<ClientPaymentScreen> {
     final double fareUsd = ride.fare ?? 0.0;
     final double fareBs = fareUsd * currencyProvider.bcvRate;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('MÉTODO DE PAGO'),
-        automaticallyImplyLeading: false,
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // --- Resumen de Pago ---
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceColor,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: AppTheme.primaryColor.withValues(alpha: 0.3),
-                    width: 1,
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('MÉTODO DE PAGO'),
+          automaticallyImplyLeading: false,
+        ),
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // --- Resumen de Pago ---
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceColor,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: AppTheme.primaryColor.withValues(alpha: 0.3),
+                      width: 1,
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      const Text(
+                        'TOTAL A PAGAR',
+                        style: TextStyle(
+                          color: AppTheme.textGrey,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '\$${fareUsd.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          color: AppTheme.textWhite,
+                          fontSize: 36,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      if (currencyProvider.bcvRate > 0) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Equivalente a Bs. ${fareBs.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            color: AppTheme.secondaryColor,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          'Tasa BCV: Bs. ${currencyProvider.bcvRate.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            color: AppTheme.textGrey,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-                child: Column(
-                  children: [
-                    const Text(
-                      'TOTAL A PAGAR',
-                      style: TextStyle(
-                        color: AppTheme.textGrey,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.5,
+                const SizedBox(height: 24),
+  
+                // --- Flujo Reactivo de Estados ---
+                if (ride.paymentStatus == 'pending') ...[
+                  _buildWaitingState(ride)
+                ] else ...[
+                  if (ride.paymentStatus == 'rejected') ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      margin: const EdgeInsets.only(bottom: 20),
+                      decoration: BoxDecoration(
+                        color: AppTheme.errorRed.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: AppTheme.errorRed, width: 1),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '\$${fareUsd.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        color: AppTheme.textWhite,
-                        fontSize: 36,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    if (currencyProvider.bcvRate > 0) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        'Equivalente a Bs. ${fareBs.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          color: AppTheme.secondaryColor,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        'Tasa BCV: Bs. ${currencyProvider.bcvRate.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          color: AppTheme.textGrey,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // --- Flujo Reactivo de Estados ---
-              if (ride.paymentStatus == 'pending') ...[
-                _buildWaitingState(ride)
-              ] else ...[
-                if (ride.paymentStatus == 'rejected') ...[
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    margin: const EdgeInsets.only(bottom: 20),
-                    decoration: BoxDecoration(
-                      color: AppTheme.errorRed.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AppTheme.errorRed, width: 1),
-                    ),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.warning_amber_rounded, color: AppTheme.errorRed, size: 28),
-                        SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'El conductor rechazó el pago anterior. Por favor verifica los datos e intenta nuevamente.',
-                            style: TextStyle(
-                              color: AppTheme.textWhite,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
+                      child: const Row(
+                        children: [
+                          Icon(Icons.warning_amber_rounded, color: AppTheme.errorRed, size: 28),
+                          SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'El conductor rechazó el pago anterior. Por favor verifica los datos e intenta nuevamente.',
+                              style: TextStyle(
+                                color: AppTheme.textWhite,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
                             ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  
+                  if (_selectedMethod == null) ...[
+                    const Text(
+                      'Selecciona cómo deseas pagar:',
+                      style: TextStyle(
+                        color: AppTheme.textWhite,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        // Tarjeta Efectivo
+                        Expanded(
+                          child: _buildMethodCard(
+                            title: 'Efectivo',
+                            subtitle: 'Pago en mano',
+                            icon: Icons.money,
+                            color: Colors.green,
+                            isSelected: false,
+                            onTap: () {
+                              setState(() => _selectedMethod = 'cash');
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        // Tarjeta Pago Móvil
+                        Expanded(
+                          child: _buildMethodCard(
+                            title: 'Pago Móvil',
+                            subtitle: 'Escanear captura',
+                            icon: Icons.qr_code_scanner,
+                            color: AppTheme.primaryColor,
+                            isSelected: false,
+                            onTap: () {
+                              setState(() => _selectedMethod = 'pago_movil');
+                            },
                           ),
                         ),
                       ],
                     ),
-                  ),
+                  ] else if (_selectedMethod == 'cash') ...[
+                    _buildCashFlow(ride.rideId)
+                  ] else if (_selectedMethod == 'pago_movil') ...[
+                    _buildPagoMovilFlow(ride)
+                  ]
                 ],
-                
-                if (_selectedMethod == null) ...[
-                  const Text(
-                    'Selecciona cómo deseas pagar:',
-                    style: TextStyle(
-                      color: AppTheme.textWhite,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      // Tarjeta Efectivo
-                      Expanded(
-                        child: _buildMethodCard(
-                          title: 'Efectivo',
-                          subtitle: 'Pago en mano',
-                          icon: Icons.money,
-                          color: Colors.green,
-                          isSelected: false,
-                          onTap: () {
-                            setState(() => _selectedMethod = 'cash');
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      // Tarjeta Pago Móvil
-                      Expanded(
-                        child: _buildMethodCard(
-                          title: 'Pago Móvil',
-                          subtitle: 'Escanear captura',
-                          icon: Icons.qr_code_scanner,
-                          color: AppTheme.primaryColor,
-                          isSelected: false,
-                          onTap: () {
-                            setState(() => _selectedMethod = 'pago_movil');
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ] else if (_selectedMethod == 'cash') ...[
-                  _buildCashFlow(ride.rideId)
-                ] else if (_selectedMethod == 'pago_movil') ...[
-                  _buildPagoMovilFlow(ride)
-                ]
               ],
-            ],
+            ),
           ),
         ),
       ),

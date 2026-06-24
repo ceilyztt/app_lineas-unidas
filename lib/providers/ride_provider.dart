@@ -3,6 +3,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/ride_model.dart';
 import '../models/driver_model.dart';
 import '../models/message_model.dart';
@@ -21,6 +22,7 @@ class RideProvider extends ChangeNotifier {
   String? _error;
   StreamSubscription? _rideSubscription;
   StreamSubscription? _messagesSubscription;
+  StreamSubscription? _driverSubscription;
   List<MessageModel> _previousMessages = [];
   bool _isFirstMessagesLoad = true;
 
@@ -157,6 +159,11 @@ class RideProvider extends ChangeNotifier {
 
   Timer? _driverRequestTimer;
 
+  // Método público para iniciar la escucha de un viaje desde fuera (ej: conductor)
+  void listenToRide(String rideId) {
+    _listenToRide(rideId);
+  }
+
   // Escuchar cambios en el viaje
   void _listenToRide(String rideId) {
     _rideSubscription?.cancel();
@@ -185,14 +192,34 @@ class RideProvider extends ChangeNotifier {
         }
         // --- FIN LÓGICA DE TIMEOUT ---
 
+        // Escuchar la ubicación del conductor asignado en tiempo real
+        if (ride.driverId != null) {
+          if (_assignedDriver == null || _assignedDriver!.uid != ride.driverId) {
+            _listenToDriver(ride.driverId!);
+          }
+        } else {
+          _driverSubscription?.cancel();
+          _driverSubscription = null;
+          _assignedDriver = null;
+        }
+
         // Si no estábamos escuchando los mensajes de este viaje, empezar a hacerlo
         if (_currentRide == null || _currentRide!.rideId != ride.rideId) {
-          _listenToMessages(ride.rideId, ride.clientId);
+          final currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
+          _listenToMessages(ride.rideId, currentUserId);
         }
 
         _currentRide = ride;
         notifyListeners();
       }
+    });
+  }
+
+  void _listenToDriver(String driverId) {
+    _driverSubscription?.cancel();
+    _driverSubscription = _firestoreService.streamDriver(driverId).listen((driver) {
+      _assignedDriver = driver;
+      notifyListeners();
     });
   }
 
@@ -391,6 +418,7 @@ class RideProvider extends ChangeNotifier {
   void clearRide() {
     _rideSubscription?.cancel();
     _messagesSubscription?.cancel();
+    _driverSubscription?.cancel();
     _currentRide = null;
     _assignedDriver = null;
     _error = null;
@@ -403,6 +431,7 @@ class RideProvider extends ChangeNotifier {
   void dispose() {
     _rideSubscription?.cancel();
     _messagesSubscription?.cancel();
+    _driverSubscription?.cancel();
     super.dispose();
   }
 }

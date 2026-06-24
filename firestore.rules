@@ -77,12 +77,12 @@ service cloud.firestore {
       
       // Subcolección: Chat del Viaje
       match /messages/{messageId} {
-        // Solo pueden leer y escribir el cliente que pidió el viaje y el conductor asignado
-        allow read, create: if isAuth() && (
+        // Solo pueden leer, escribir y actualizar el cliente que pidió el viaje y el conductor asignado
+        allow read, create, update: if isAuth() && (
           get(/databases/$(database)/documents/rides/$(rideId)).data.clientId == request.auth.uid ||
           get(/databases/$(database)/documents/rides/$(rideId)).data.driverId == request.auth.uid
         );
-        allow update, delete: if false;
+        allow delete: if false;
       }
     }
 

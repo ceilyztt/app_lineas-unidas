@@ -38,6 +38,10 @@ class DriverModel {
   final String? fcmToken;
   final DateTime createdAt;
   final DateTime? lastLocationUpdate;
+  final bool isRejected;
+  final String? rejectionReason;
+  final bool isSuspended;
+  final String? suspensionReason;
 
   // Datos de Pago Móvil
   final String? bankName;
@@ -78,6 +82,10 @@ class DriverModel {
     this.bankName,
     this.bankPhone,
     this.bankDni,
+    this.isRejected = false,
+    this.rejectionReason,
+    this.isSuspended = false,
+    this.suspensionReason,
   });
 
   Map<String, dynamic> toMap() {
@@ -115,6 +123,10 @@ class DriverModel {
       'bankName': bankName,
       'bankPhone': bankPhone,
       'bankDni': bankDni,
+      'isRejected': isRejected,
+      'rejectionReason': rejectionReason,
+      'isSuspended': isSuspended,
+      'suspensionReason': suspensionReason,
     };
   }
 
@@ -153,6 +165,10 @@ class DriverModel {
       bankName: map['bankName'],
       bankPhone: map['bankPhone'],
       bankDni: map['bankDni'],
+      isRejected: map['isRejected'] ?? false,
+      rejectionReason: map['rejectionReason'],
+      isSuspended: map['isSuspended'] ?? false,
+      suspensionReason: map['suspensionReason'],
     );
   }
 
@@ -190,6 +206,10 @@ class DriverModel {
     String? bankName,
     String? bankPhone,
     String? bankDni,
+    bool? isRejected,
+    String? rejectionReason,
+    bool? isSuspended,
+    String? suspensionReason,
   }) {
     return DriverModel(
       uid: uid ?? this.uid,
@@ -225,6 +245,10 @@ class DriverModel {
       bankName: bankName ?? this.bankName,
       bankPhone: bankPhone ?? this.bankPhone,
       bankDni: bankDni ?? this.bankDni,
+      isRejected: isRejected ?? this.isRejected,
+      rejectionReason: rejectionReason ?? this.rejectionReason,
+      isSuspended: isSuspended ?? this.isSuspended,
+      suspensionReason: suspensionReason ?? this.suspensionReason,
     );
   }
 }

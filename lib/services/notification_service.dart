@@ -3,6 +3,11 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class NotificationService {
+  // Patrón Singleton
+  static final NotificationService _instance = NotificationService._internal();
+  factory NotificationService() => _instance;
+  NotificationService._internal();
+
   static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
   static bool isChatOpen = false;
   static String? activeRideId;
@@ -13,62 +18,95 @@ class NotificationService {
 
   // Inicializar notificaciones
   Future<void> initialize() async {
-    // Solicitar permisos
-    await _messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
+    // 1. Solicitar permisos de Firebase Messaging (FCM) de forma segura
+    try {
+      await _messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+    } catch (e) {
+      debugPrint("FCM requestPermission error: $e");
+    }
 
-    // Configurar notificaciones locales
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const iosSettings = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
-    );
+    // 2. Configurar notificaciones locales de forma segura
+    try {
+      const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const iosSettings = DarwinInitializationSettings(
+        requestAlertPermission: true,
+        requestBadgePermission: true,
+        requestSoundPermission: true,
+      );
 
-    await _localNotifications.initialize(
-      const InitializationSettings(
-        android: androidSettings,
-        iOS: iosSettings,
-      ),
-      onDidReceiveNotificationResponse: _handleNotificationTap,
-    );
+      await _localNotifications.initialize(
+        const InitializationSettings(
+          android: androidSettings,
+          iOS: iosSettings,
+        ),
+        onDidReceiveNotificationResponse: _handleNotificationTap,
+      );
 
-    // Crear canal de notificación para Android
-    const androidChannel = AndroidNotificationChannel(
-      'lineas_unidas_channel',
-      'Líneas Unidas',
-      description: 'Notificaciones de viajes y solicitudes',
-      importance: Importance.high,
-    );
+      // Solicitar permiso explícito de notificaciones para Android 13+
+      await _localNotifications
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.requestNotificationsPermission();
+    } catch (e) {
+      debugPrint("Local notifications initialize/permission error: $e");
+    }
 
-    await _localNotifications
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(androidChannel);
+    // 3. Crear canal de notificación para Android de forma segura
+    try {
+      const androidChannel = AndroidNotificationChannel(
+        'lineas_unidas_channel',
+        'Líneas Unidas',
+        description: 'Notificaciones de viajes y solicitudes',
+        importance: Importance.high,
+      );
 
-    // Escuchar mensajes en primer plano
-    FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+      await _localNotifications
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(androidChannel);
+    } catch (e) {
+      debugPrint("Create notification channel error: $e");
+    }
 
-    // Escuchar cuando se toca una notificación
-    FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageOpenedApp);
+    // 4. Registrar escuchas de Firebase Messaging de forma segura
+    try {
+      FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+      FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageOpenedApp);
+    } catch (e) {
+      debugPrint("Firebase Messaging listen error: $e");
+    }
   }
 
   // Obtener token FCM
   Future<String?> getToken() async {
-    return await _messaging.getToken();
+    try {
+      return await _messaging.getToken();
+    } catch (e) {
+      debugPrint("Error getting FCM token: $e");
+      return null;
+    }
   }
 
   // Suscribirse a un tema (ej: 'drivers' para todos los conductores)
   Future<void> subscribeToTopic(String topic) async {
-    await _messaging.subscribeToTopic(topic);
+    try {
+      await _messaging.subscribeToTopic(topic);
+    } catch (e) {
+      debugPrint("Error subscribing to topic $topic: $e");
+    }
   }
 
   // Desuscribirse de un tema
   Future<void> unsubscribeFromTopic(String topic) async {
-    await _messaging.unsubscribeFromTopic(topic);
+    try {
+      await _messaging.unsubscribeFromTopic(topic);
+    } catch (e) {
+      debugPrint("Error unsubscribing from topic $topic: $e");
+    }
   }
 
   // Mostrar notificación local
@@ -92,16 +130,20 @@ class NotificationService {
       presentSound: true,
     );
 
-    await _localNotifications.show(
-      DateTime.now().millisecondsSinceEpoch ~/ 1000,
-      title,
-      body,
-      const NotificationDetails(
-        android: androidDetails,
-        iOS: iosDetails,
-      ),
-      payload: payload,
-    );
+    try {
+      await _localNotifications.show(
+        DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        title,
+        body,
+        const NotificationDetails(
+          android: androidDetails,
+          iOS: iosDetails,
+        ),
+        payload: payload,
+      );
+    } catch (e) {
+      debugPrint("Error showing local notification: $e");
+    }
   }
 
   // Manejar mensajes en primer plano

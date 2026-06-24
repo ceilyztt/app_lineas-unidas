@@ -30,6 +30,7 @@ class DriverPendingScreen extends StatelessWidget {
           if (snapshot.hasData && snapshot.data!.exists) {
             final data = snapshot.data!.data() as Map<String, dynamic>?;
             final isApproved = data?['isApproved'] ?? false;
+            final isRejected = data?['isRejected'] ?? false;
 
             if (isApproved == true) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -37,9 +38,14 @@ class DriverPendingScreen extends StatelessWidget {
               });
             }
 
+            if (isRejected == true) {
+              final reason = data?['rejectionReason'] as String?;
+              return _buildRejectedUI(context, reason);
+            }
+
             return _buildWaitingUI(context);
           } else if (snapshot.hasData && !snapshot.data!.exists) {
-            return _buildRejectedUI(context);
+            return _buildRejectedUI(context, null);
           }
           return const Center(child: CircularProgressIndicator());
         },
@@ -85,7 +91,7 @@ class DriverPendingScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildRejectedUI(BuildContext context) {
+  Widget _buildRejectedUI(BuildContext context, String? reason) {
     return Padding(
       padding: const EdgeInsets.all(32.0),
       child: Center(
@@ -95,15 +101,17 @@ class DriverPendingScreen extends StatelessWidget {
             const Icon(Icons.cancel, size: 80, color: AppTheme.errorRed),
             const SizedBox(height: 24),
             const Text(
-              'SOLICITUD RECHAZADA', 
+              'SOLICITUD NEGADA', 
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Tu solicitud no ha sido aprobada tras la revisión. Contacta con la oficina central para más información.',
+            Text(
+              reason != null && reason.isNotEmpty
+                  ? 'Tu solicitud de registro como conductor ha sido rechazada por el siguiente motivo:\n\n"$reason"'
+                  : 'Tu solicitud no ha sido aprobada tras la revisión. Contacta con la oficina central para más información.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppTheme.textGrey, fontSize: 16, height: 1.5),
+              style: const TextStyle(color: AppTheme.textGrey, fontSize: 16, height: 1.5),
             ),
             const SizedBox(height: 48),
             ElevatedButton(

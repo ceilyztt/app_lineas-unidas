@@ -8,8 +8,15 @@ import '../../services/firestore_service.dart';
 import '../../models/sos_alert_model.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-class AdminHomeScreen extends StatelessWidget {
+class AdminHomeScreen extends StatefulWidget {
   const AdminHomeScreen({super.key});
+
+  @override
+  State<AdminHomeScreen> createState() => _AdminHomeScreenState();
+}
+
+class _AdminHomeScreenState extends State<AdminHomeScreen> {
+  bool _showActiveDrivers = false;
 
   @override
   Widget build(BuildContext context) {
@@ -17,78 +24,86 @@ class AdminHomeScreen extends StatelessWidget {
       children: [
         Scaffold(
           backgroundColor: AppTheme.backgroundColor,
-      body: Column(
-        children: [
-          _buildAdminHeader(context),
-          Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('drivers')
-                  .where('isApproved', isEqualTo: false)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) return const Center(child: Text('Error al cargar datos', style: TextStyle(color: Colors.white)));
-                if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-
-                final docs = snapshot.data!.docs;
-
-                if (docs.isEmpty) {
-                  return const Center(child: Text('No hay solicitudes pendientes', style: TextStyle(color: Colors.white, fontSize: 18)));
-                }
-
-                return ListView.builder(
-                  itemCount: docs.length,
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  itemBuilder: (context, index) {
-                    final data = docs[index].data() as Map<String, dynamic>;
-                    final docId = docs[index].id;
-
-                    return Card(
-                      color: AppTheme.surfaceColor,
-                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      child: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: ListTile(
-                          title: Text(data['name'] ?? 'Sin nombre', style: const TextStyle(color: AppTheme.textWhite, fontWeight: FontWeight.bold, fontSize: 18)),
-                          subtitle: Padding(
-                            padding: const EdgeInsets.only(top: 8.0),
-                            child: Text('Vehículo: ${data['vehicleBrand']} ${data['vehicleModel']}\nPlaca: ${data['vehiclePlate']}\nExperiencia: ${data['yearsOfExperience']} años', style: const TextStyle(color: AppTheme.textGrey, height: 1.4)),
-                          ),
-                          isThreeLine: true,
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                decoration: BoxDecoration(color: AppTheme.primaryColor.withValues(alpha: 0.1), shape: BoxShape.circle),
-                                child: IconButton(
-                                  icon: const Icon(Icons.remove_red_eye, color: AppTheme.primaryColor),
-                                  onPressed: () => _mostrarExpedienteAspirante(context, data, docId),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Container(
-                                decoration: BoxDecoration(color: AppTheme.errorRed.withValues(alpha: 0.1), shape: BoxShape.circle),
-                                child: IconButton(
-                                  icon: const Icon(Icons.cancel, color: AppTheme.errorRed),
-                                  onPressed: () => _rechazarConductor(context, docId),
-                                ),
-                              ),
-                            ],
+          body: Column(
+            children: [
+              _buildAdminHeader(context),
+              
+              // Selector de pestañas premium
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: !_showActiveDrivers
+                              ? AppTheme.primaryColor
+                              : AppTheme.surfaceColor,
+                          foregroundColor: !_showActiveDrivers
+                              ? AppTheme.backgroundColor
+                              : AppTheme.textWhite,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(
+                              color: !_showActiveDrivers
+                                  ? AppTheme.primaryColor
+                                  : AppTheme.cardColor,
+                            ),
                           ),
                         ),
+                        onPressed: () {
+                          setState(() => _showActiveDrivers = false);
+                        },
+                        child: const Text(
+                          'Solicitudes',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                        ),
                       ),
-                    );
-                  },
-                );
-              },
-            ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _showActiveDrivers
+                              ? AppTheme.primaryColor
+                              : AppTheme.surfaceColor,
+                          foregroundColor: _showActiveDrivers
+                              ? AppTheme.backgroundColor
+                              : AppTheme.textWhite,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(
+                              color: _showActiveDrivers
+                                  ? AppTheme.primaryColor
+                                  : AppTheme.cardColor,
+                            ),
+                          ),
+                        ),
+                        onPressed: () {
+                          setState(() => _showActiveDrivers = true);
+                        },
+                        child: const Text(
+                          'Activos',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              Expanded(
+                child: !_showActiveDrivers
+                    ? _buildPendingRequestsView()
+                    : _buildActiveDriversView(),
+              ),
+            ],
           ),
-        ],
-      ),
-    ),
+        ),
         
-    // Capa Superior: Escucha de Alertas de Emergencia (SOS)
+        // Capa Superior: Escucha de Alertas de Emergencia (SOS)
         StreamBuilder<List<SosAlertModel>>(
           stream: FirestoreService().streamActiveSosAlerts(),
           builder: (context, snapshot) {
@@ -165,6 +180,216 @@ class AdminHomeScreen extends StatelessWidget {
           },
         ),
       ],
+    );
+  }
+
+  Widget _buildPendingRequestsView() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('drivers')
+          .where('isApproved', isEqualTo: false)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) return const Center(child: Text('Error al cargar datos', style: TextStyle(color: Colors.white)));
+        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+
+        final docs = snapshot.data!.docs.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          return data['isRejected'] != true;
+        }).toList();
+
+        if (docs.isEmpty) {
+          return const Center(child: Text('No hay solicitudes pendientes', style: TextStyle(color: Colors.white, fontSize: 18)));
+        }
+
+        return ListView.builder(
+          itemCount: docs.length,
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          itemBuilder: (context, index) {
+            final data = docs[index].data() as Map<String, dynamic>;
+            final docId = docs[index].id;
+
+            return Card(
+              color: AppTheme.surfaceColor,
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: ListTile(
+                  title: Text(data['name'] ?? 'Sin nombre', style: const TextStyle(color: AppTheme.textWhite, fontWeight: FontWeight.bold, fontSize: 18)),
+                  subtitle: Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Text('Vehículo: ${data['vehicleBrand']} ${data['vehicleModel']}\nPlaca: ${data['vehiclePlate']}\nExperiencia: ${data['yearsOfExperience']} años', style: const TextStyle(color: AppTheme.textGrey, height: 1.4)),
+                  ),
+                  isThreeLine: true,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(color: AppTheme.primaryColor.withValues(alpha: 0.1), shape: BoxShape.circle),
+                        child: IconButton(
+                          icon: const Icon(Icons.remove_red_eye, color: AppTheme.primaryColor),
+                          onPressed: () => _mostrarExpedienteAspirante(context, data, docId),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        decoration: BoxDecoration(color: AppTheme.errorRed.withValues(alpha: 0.1), shape: BoxShape.circle),
+                        child: IconButton(
+                          icon: const Icon(Icons.cancel, color: AppTheme.errorRed),
+                          onPressed: () => _rechazarConductor(context, docId),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildActiveDriversView() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('drivers')
+          .where('isApproved', isEqualTo: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) return const Center(child: Text('Error al cargar datos', style: TextStyle(color: Colors.white)));
+        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+
+        final docs = snapshot.data!.docs;
+
+        if (docs.isEmpty) {
+          return const Center(child: Text('No hay conductores activos', style: TextStyle(color: Colors.white, fontSize: 18)));
+        }
+
+        return ListView.builder(
+          itemCount: docs.length,
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          itemBuilder: (context, index) {
+            final data = docs[index].data() as Map<String, dynamic>;
+            final docId = docs[index].id;
+            
+            final isSuspended = data['isSuspended'] ?? false;
+            final String name = data['name'] ?? 'Sin nombre';
+            final String vehicleInfo = '${data['vehicleBrand'] ?? ''} ${data['vehicleModel'] ?? ''}'.trim();
+            final String plate = data['vehiclePlate'] ?? '';
+            final String category = data['vehicleCategory'] ?? 'Tipo B - Estándar';
+            final double rating = (data['avgRating'] ?? 0.0).toDouble();
+
+            return Card(
+              color: AppTheme.surfaceColor,
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(
+                  color: isSuspended ? AppTheme.errorRed.withValues(alpha: 0.3) : Colors.transparent,
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: ListTile(
+                  title: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          name,
+                          style: const TextStyle(
+                            color: AppTheme.textWhite,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: isSuspended
+                              ? AppTheme.errorRed.withValues(alpha: 0.15)
+                              : AppTheme.successGreen.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          isSuspended ? 'SUSPENDIDO' : 'ACTIVO',
+                          style: TextStyle(
+                            color: isSuspended ? AppTheme.errorRed : AppTheme.successGreen,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  subtitle: Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Vehículo: $vehicleInfo\nPlaca: $plate\nCategoría: $category',
+                          style: const TextStyle(color: AppTheme.textGrey, height: 1.4),
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            const Icon(Icons.star, color: Colors.amber, size: 16),
+                            const SizedBox(width: 4),
+                            Text(
+                              rating.toStringAsFixed(1),
+                              style: const TextStyle(color: AppTheme.textWhite, fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                          ],
+                        ),
+                        if (isSuspended && data['suspensionReason'] != null) ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppTheme.backgroundColor,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              'Motivo suspensión: "${data['suspensionReason']}"',
+                              style: const TextStyle(color: AppTheme.errorRed, fontSize: 12, fontStyle: FontStyle.italic),
+                            ),
+                          ),
+                        ]
+                      ],
+                    ),
+                  ),
+                  isThreeLine: true,
+                  trailing: Container(
+                    decoration: BoxDecoration(
+                      color: isSuspended 
+                          ? AppTheme.successGreen.withValues(alpha: 0.1) 
+                          : AppTheme.errorRed.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon: Icon(
+                        isSuspended ? Icons.check_circle_outline : Icons.block,
+                        color: isSuspended ? AppTheme.successGreen : AppTheme.errorRed,
+                      ),
+                      onPressed: () {
+                        if (isSuspended) {
+                          _reactivarConductor(context, docId);
+                        } else {
+                          _suspenderConductor(context, docId);
+                        }
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -267,7 +492,6 @@ class AdminHomeScreen extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // --- SECCIÓN 1: DATOS PERSONALES ---
                 _buildSeccionTitulo("IDENTIFICACIÓN"),
                 _buildDatoFila(Icons.person, "Nombre", data['name']),
                 _buildDatoFila(Icons.phone, "Teléfono", data['phone']),
@@ -275,14 +499,12 @@ class AdminHomeScreen extends StatelessWidget {
                 _buildDatoFila(Icons.work_history, "Experiencia", "${data['yearsOfExperience']} años"),
                 const Divider(color: AppTheme.cardColor),
 
-                // --- SECCIÓN 2: DATOS DEL VEHÍCULO ---
                 _buildSeccionTitulo("VEHÍCULO"),
                 _buildDatoFila(Icons.directions_car, "Marca/Modelo", "${data['vehicleBrand']} ${data['vehicleModel']}"),
                 _buildDatoFila(Icons.numbers, "Placa", data['vehiclePlate']),
                 _buildDatoFila(Icons.color_lens, "Color", data['vehicleColor']),
                 const Divider(color: AppTheme.cardColor),
 
-                // --- SECCIÓN 3: FOTOS DE INSPECCIÓN ---
                 _buildSeccionTitulo("GALERÍA DE ESTADO"),
                 const SizedBox(height: 8),
                 SingleChildScrollView(
@@ -297,7 +519,6 @@ class AdminHomeScreen extends StatelessWidget {
                 ),
                 const Divider(color: AppTheme.cardColor),
 
-                // --- SECCIÓN 4: DECLARACIÓN JURADA ---
                 _buildSeccionTitulo("CONFORT Y CALIDAD"),
                 _buildDatoFila(Icons.ac_unit, "Aire Acond.", data['hasAirConditioning'] == true ? "SÍ" : "NO"),
                 _buildDatoFila(Icons.cleaning_services, "Limpieza", data['cleanlinessLevel']),
@@ -421,6 +642,7 @@ class AdminHomeScreen extends StatelessWidget {
       onPressed: () async {
         await FirebaseFirestore.instance.collection('drivers').doc(docId).update({
           'isApproved': true,
+          'isRejected': false, // Limpiar rechazos pasados al aprobar
           'vehicleCategory': cat,
         });
 
@@ -434,8 +656,188 @@ class AdminHomeScreen extends StatelessWidget {
   }
 
   Future<void> _rechazarConductor(BuildContext context, String docId) async {
-    await FirebaseFirestore.instance.collection('drivers').doc(docId).delete();
+    final TextEditingController reasonController = TextEditingController();
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: AppTheme.backgroundColor,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text(
+            'Rechazar Solicitud',
+            style: TextStyle(color: AppTheme.errorRed, fontWeight: FontWeight.bold),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Escribe el motivo por el cual estás negando la solicitud del conductor:',
+                style: TextStyle(color: AppTheme.textWhite, fontSize: 14),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: reasonController,
+                maxLines: 3,
+                style: const TextStyle(color: AppTheme.textWhite),
+                decoration: InputDecoration(
+                  hintText: 'Ej. Documentación vencida, fotos borrosas, etc.',
+                  hintStyle: const TextStyle(color: AppTheme.textGrey),
+                  fillColor: AppTheme.surfaceColor,
+                  filled: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('CANCELAR', style: TextStyle(color: AppTheme.textGrey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.errorRed),
+              onPressed: () async {
+                final reason = reasonController.text.trim();
+                if (reason.isEmpty) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    const SnackBar(
+                      content: Text('Por favor escribe un motivo.'),
+                      backgroundColor: AppTheme.errorRed,
+                    ),
+                  );
+                  return;
+                }
+
+                await FirebaseFirestore.instance.collection('drivers').doc(docId).update({
+                  'isRejected': true,
+                  'rejectionReason': reason,
+                });
+
+                if (dialogContext.mounted) {
+                  Navigator.pop(dialogContext);
+                }
+
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Solicitud negada con éxito.', style: TextStyle(color: Colors.white)),
+                      backgroundColor: AppTheme.errorRed,
+                    ),
+                  );
+                }
+              },
+              child: const Text('NEGAR SOLICITUD', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _suspenderConductor(BuildContext context, String docId) async {
+    final TextEditingController reasonController = TextEditingController();
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: AppTheme.backgroundColor,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text(
+            'Suspender Conductor',
+            style: TextStyle(color: AppTheme.errorRed, fontWeight: FontWeight.bold),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Escribe el motivo por el cual estás suspendiendo a este conductor:',
+                style: TextStyle(color: AppTheme.textWhite, fontSize: 14),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: reasonController,
+                maxLines: 3,
+                style: const TextStyle(color: AppTheme.textWhite),
+                decoration: InputDecoration(
+                  hintText: 'Ej. Reporte de mala conducta, tarifa excesiva, etc.',
+                  hintStyle: const TextStyle(color: AppTheme.textGrey),
+                  fillColor: AppTheme.surfaceColor,
+                  filled: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('CANCELAR', style: TextStyle(color: AppTheme.textGrey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.errorRed),
+              onPressed: () async {
+                final reason = reasonController.text.trim();
+                if (reason.isEmpty) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    const SnackBar(
+                      content: Text('Por favor escribe un motivo.'),
+                      backgroundColor: AppTheme.errorRed,
+                    ),
+                  );
+                  return;
+                }
+
+                await FirebaseFirestore.instance.collection('drivers').doc(docId).update({
+                  'isSuspended': true,
+                  'suspensionReason': reason,
+                  'isAvailable': false, // Forzar no disponible al suspender
+                });
+
+                if (dialogContext.mounted) {
+                  Navigator.pop(dialogContext);
+                }
+
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Conductor suspendido con éxito.', style: TextStyle(color: Colors.white)),
+                      backgroundColor: AppTheme.errorRed,
+                    ),
+                  );
+                }
+              },
+              child: const Text('SUSPENDER', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _reactivarConductor(BuildContext context, String docId) async {
+    await FirebaseFirestore.instance.collection('drivers').doc(docId).update({
+      'isSuspended': false,
+      'suspensionReason': null,
+    });
+
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Solicitud declinada', style: TextStyle(color: Colors.white)), backgroundColor: AppTheme.errorRed));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Conductor reactivado con éxito.', style: TextStyle(color: Colors.white)),
+        backgroundColor: AppTheme.successGreen,
+      ),
+    );
   }
 }
