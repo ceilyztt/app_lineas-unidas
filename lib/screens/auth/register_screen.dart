@@ -36,6 +36,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _vehicleColorController = TextEditingController();
   final _vehiclePlateController = TextEditingController();
 
+  // Controladores de Pago Móvil
+  final _pmBankController = TextEditingController();
+  final _pmPhoneController = TextEditingController();
+  final _pmDniController = TextEditingController();
+
   // Fotos de Conductor y Vehículo
   File? _clientPhoto;
   File? _driverPhoto;
@@ -83,6 +88,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _vehicleModelController.dispose();
     _vehicleColorController.dispose();
     _vehiclePlateController.dispose();
+    _pmBankController.dispose();
+    _pmPhoneController.dispose();
+    _pmDniController.dispose();
     super.dispose();
   }
 
@@ -208,6 +216,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
         vehiclePhotoFront: _vehiclePhotoFront,
         vehiclePhotoBack: _vehiclePhotoBack,
         vehiclePhotoInterior: _vehiclePhotoInterior,
+        bankName: _pmBankController.text.trim(),
+        bankPhone: _pmPhoneController.text.trim(),
+        bankDni: _pmDniController.text.trim(),
       );
     }
 
@@ -215,7 +226,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (_selectedRole == 'driver') {
         Navigator.pushNamedAndRemoveUntil(context, AppRoutes.driverPending, (r) => false);
       } else {
-        Navigator.pushNamedAndRemoveUntil(context, AppRoutes.clientHome, (r) => false);
+        await authProvider.signOut();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('El registro ha sido exitoso', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              backgroundColor: AppTheme.successGreen,
+            ),
+          );
+          Navigator.pushNamedAndRemoveUntil(context, AppRoutes.login, (r) => false);
+        }
       }
     }
   }
@@ -492,6 +512,53 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           textCapitalization: TextCapitalization.characters,
                           style: const TextStyle(color: AppTheme.textWhite),
                           decoration: const InputDecoration(labelText: 'Placa', prefixIcon: Icon(Icons.numbers)),
+                          validator: (value) => value == null || value.isEmpty ? 'Requerido' : null,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  // DATOS DE PAGO MÓVIL
+                  const Text(
+                    'Datos para recibir Pagos Móviles',
+                    style: TextStyle(color: AppTheme.textWhite, fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _pmBankController,
+                    style: const TextStyle(color: AppTheme.textWhite),
+                    decoration: const InputDecoration(labelText: 'Banco (Ej: Banco de Venezuela)', prefixIcon: Icon(Icons.account_balance)),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]')),
+                    ],
+                    validator: (value) => value == null || value.isEmpty ? 'Requerido' : null,
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _pmPhoneController,
+                          keyboardType: TextInputType.phone,
+                          style: const TextStyle(color: AppTheme.textWhite),
+                          decoration: const InputDecoration(labelText: 'Teléfono', prefixIcon: Icon(Icons.phone_android)),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                          validator: (value) => value == null || value.isEmpty ? 'Requerido' : null,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _pmDniController,
+                          keyboardType: TextInputType.number,
+                          style: const TextStyle(color: AppTheme.textWhite),
+                          decoration: const InputDecoration(labelText: 'Cédula', prefixIcon: Icon(Icons.badge)),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
                           validator: (value) => value == null || value.isEmpty ? 'Requerido' : null,
                         ),
                       ),

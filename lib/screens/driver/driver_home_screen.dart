@@ -262,7 +262,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(16),
               child: Image.asset(
-                'assets/images/team_welcome.png',
+                'assets/images/team_welcome.png.jpeg',
                 width: double.infinity,
                 fit: BoxFit.contain,
                 errorBuilder: (context, error, stackTrace) {
@@ -282,7 +282,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                             color: AppTheme.primaryColor, size: 40),
                         SizedBox(height: 8),
                         Text(
-                          'Guarda tu imagen como\nassets/images/team_welcome.png',
+                          'Guarda tu imagen como\nassets/images/team_welcome.png.jpeg',
                           textAlign: TextAlign.center,
                           style:
                               TextStyle(color: AppTheme.textGrey, fontSize: 12),
@@ -548,18 +548,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               textAlign: TextAlign.right,
             ),
           ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: Text(
-              'Mi UID: ${authProvider.firebaseUser?.uid ?? 'N/D'}',
-              style: const TextStyle(
-                fontSize: 10,
-                color: AppTheme.textGrey,
-                fontFamily: 'monospace',
-              ),
-              textAlign: TextAlign.right,
-            ),
-          ),
+
           const SizedBox(height: 6),
           const Align(
             alignment: Alignment.centerRight,

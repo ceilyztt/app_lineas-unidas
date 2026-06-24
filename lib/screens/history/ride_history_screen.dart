@@ -60,6 +60,8 @@ class _RideHistoryScreenState extends State<RideHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final role = Provider.of<AuthProvider>(context, listen: false).userRole ?? 'client';
+    
     return Scaffold(
       appBar: AppBar(
         title: const Text('Historial de Viajes'),
@@ -173,7 +175,7 @@ class _RideHistoryScreenState extends State<RideHistoryScreen> {
                                   mainAxisAlignment:
                                       MainAxisAlignment.spaceBetween,
                                   children: [
-                                    if (ride.driverName != null)
+                                    if (role == 'client' && ride.driverName != null)
                                       Row(
                                         children: [
                                           const Icon(
@@ -184,6 +186,24 @@ class _RideHistoryScreenState extends State<RideHistoryScreen> {
                                           const SizedBox(width: 4),
                                           Text(
                                             ride.driverName!,
+                                            style: const TextStyle(
+                                              color: AppTheme.textGrey,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ],
+                                      )
+                                    else if (role == 'driver')
+                                      Row(
+                                        children: [
+                                          const Icon(
+                                            Icons.person,
+                                            color: AppTheme.textGrey,
+                                            size: 16,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            ride.clientName,
                                             style: const TextStyle(
                                               color: AppTheme.textGrey,
                                               fontSize: 13,

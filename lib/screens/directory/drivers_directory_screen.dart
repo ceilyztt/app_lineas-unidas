@@ -4,6 +4,7 @@ import '../../config/theme.dart';
 import '../../config/routes.dart';
 import '../../models/driver_model.dart';
 import '../widgets/star_rating.dart';
+import '../widgets/vehicle_classification_dialog.dart';
 
 class DriversDirectoryScreen extends StatelessWidget {
   const DriversDirectoryScreen({super.key});
@@ -25,6 +26,13 @@ class DriversDirectoryScreen extends StatelessWidget {
         title: const Text('Directorio de Conductores'),
         backgroundColor: AppTheme.surfaceColor,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline, color: AppTheme.primaryColor),
+            tooltip: 'Clasificación de Vehículos',
+            onPressed: () => showVehicleClassificationDialog(context),
+          ),
+        ],
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance

@@ -5,6 +5,7 @@ import '../../config/routes.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/driver_provider.dart';
 import '../widgets/star_rating.dart';
+import '../widgets/vehicle_classification_dialog.dart';
 
 class DriverProfileScreen extends StatelessWidget {
   const DriverProfileScreen({super.key});
@@ -124,6 +125,41 @@ class DriverProfileScreen extends StatelessWidget {
 
                   const SizedBox(height: 24),
                   _buildSectionTitle('Información del Vehículo'),
+                  InkWell(
+                    onTap: () => showVehicleClassificationDialog(context),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.surfaceColor,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.3), width: 1),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.workspace_premium_outlined, color: Colors.amber, size: 24),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Clasificación del Vehículo',
+                                  style: TextStyle(color: AppTheme.textGrey, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5),
+                                ),
+                                Text(
+                                  driver?.vehicleCategory ?? 'N/A',
+                                  style: const TextStyle(color: AppTheme.textWhite, fontSize: 15, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.help_outline, color: AppTheme.textGrey, size: 20),
+                        ],
+                      ),
+                    ),
+                  ),
                   Row(
                     children: [
                       Expanded(child: _buildInfoTile(Icons.directions_car_outlined, 'Marca', driver?.vehicleBrand ?? 'N/A')),
@@ -321,70 +357,96 @@ class DriverProfileScreen extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          backgroundColor: AppTheme.surfaceColor,
-          title: const Text('Cambiar Contraseña', style: TextStyle(color: AppTheme.textWhite)),
-          content: Form(
-            key: formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: currentPasswordController,
-                  obscureText: true,
-                  style: const TextStyle(color: AppTheme.textWhite),
-                  decoration: const InputDecoration(labelText: 'Contraseña Actual'),
-                  validator: (v) => v!.isEmpty ? 'Requerido' : null,
+        bool obscureCurrent = true;
+        bool obscureNew = true;
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              backgroundColor: AppTheme.surfaceColor,
+              title: const Text('Cambiar Contraseña', style: TextStyle(color: AppTheme.textWhite)),
+              content: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: currentPasswordController,
+                      obscureText: obscureCurrent,
+                      style: const TextStyle(color: AppTheme.textWhite),
+                      decoration: InputDecoration(
+                        labelText: 'Contraseña Actual',
+                        suffixIcon: IconButton(
+                          icon: Icon(obscureCurrent ? Icons.visibility_off : Icons.visibility, color: AppTheme.textGrey),
+                          onPressed: () {
+                            setState(() {
+                              obscureCurrent = !obscureCurrent;
+                            });
+                          },
+                        ),
+                      ),
+                      validator: (v) => v!.isEmpty ? 'Requerido' : null,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: newPasswordController,
+                      obscureText: obscureNew,
+                      style: const TextStyle(color: AppTheme.textWhite),
+                      decoration: InputDecoration(
+                        labelText: 'Nueva Contraseña',
+                        suffixIcon: IconButton(
+                          icon: Icon(obscureNew ? Icons.visibility_off : Icons.visibility, color: AppTheme.textGrey),
+                          onPressed: () {
+                            setState(() {
+                              obscureNew = !obscureNew;
+                            });
+                          },
+                        ),
+                      ),
+                      validator: (v) => v!.length < 6 ? 'Mínimo 6 caracteres' : null,
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: newPasswordController,
-                  obscureText: true,
-                  style: const TextStyle(color: AppTheme.textWhite),
-                  decoration: const InputDecoration(labelText: 'Nueva Contraseña'),
-                  validator: (v) => v!.length < 6 ? 'Mínimo 6 caracteres' : null,
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar', style: TextStyle(color: AppTheme.textGrey)),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    if (!formKey.currentState!.validate()) return;
+                    
+                    showDialog(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (_) => const Center(child: CircularProgressIndicator()),
+                    );
+
+                    final success = await auth.changePassword(
+                      currentPasswordController.text,
+                      newPasswordController.text,
+                    );
+                    
+                    if (!context.mounted) return;
+                    Navigator.pop(context); // cerrar progress
+
+                    if (success) {
+                      Navigator.pop(context); // cerrar dialog form
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Contraseña actualizada con éxito', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), backgroundColor: AppTheme.successGreen),
+                      );
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(auth.error ?? 'Error de actualización', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), backgroundColor: AppTheme.errorRed),
+                      );
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor),
+                  child: const Text('Guardar'),
                 ),
               ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar', style: TextStyle(color: AppTheme.textGrey)),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (!formKey.currentState!.validate()) return;
-                
-                showDialog(
-                  context: context,
-                  barrierDismissible: false,
-                  builder: (_) => const Center(child: CircularProgressIndicator()),
-                );
-
-                final success = await auth.changePassword(
-                  currentPasswordController.text,
-                  newPasswordController.text,
-                );
-                
-                if (!context.mounted) return;
-                Navigator.pop(context); // cerrar progress
-
-                if (success) {
-                  Navigator.pop(context); // cerrar dialog form
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Contraseña actualizada con éxito', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), backgroundColor: AppTheme.successGreen),
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(auth.error ?? 'Error de actualización', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), backgroundColor: AppTheme.errorRed),
-                  );
-                }
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor),
-              child: const Text('Guardar'),
-            ),
-          ],
+            );
+          },
         );
       },
     );

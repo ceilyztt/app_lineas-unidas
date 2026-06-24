@@ -211,7 +211,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(16),
                 child: Image.asset(
-                  'assets/images/team_welcome.png',
+                  'assets/images/team_welcome.png.jpeg',
                   width: double.infinity,
                   fit: BoxFit.contain,
                   errorBuilder: (context, error, stackTrace) {
@@ -229,7 +229,7 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                           Icon(Icons.image, color: AppTheme.primaryColor, size: 40),
                           SizedBox(height: 8),
                           Text(
-                            'Guarda tu imagen como\nassets/images/team_welcome.png',
+                            'Guarda tu imagen como\nassets/images/team_welcome.png.jpeg',
                             textAlign: TextAlign.center,
                             style: TextStyle(color: AppTheme.textGrey, fontSize: 12),
                           ),
@@ -257,30 +257,16 @@ class _ClientHomeScreenState extends State<ClientHomeScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: AnimatedServiceCard(
-                          title: 'Moverme\nen la ciudad',
-                          emoji: '🚕',
-                          color: AppTheme.primaryColor,
-                          onTap: () {
-                            Navigator.pushNamed(context, AppRoutes.cityRide);
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: AnimatedServiceCard(
-                          title: 'Salir\nde viaje',
-                          emoji: '🧳',
-                          color: AppTheme.secondaryColor,
-                          onTap: () {
-                            Navigator.pushNamed(context, AppRoutes.nationalFares);
-                          },
-                        ),
-                      ),
-                    ],
+                  SizedBox(
+                    width: double.infinity,
+                    child: AnimatedServiceCard(
+                      title: 'Moverme en la ciudad',
+                      emoji: '🚕',
+                      color: AppTheme.primaryColor,
+                      onTap: () {
+                        Navigator.pushNamed(context, AppRoutes.cityRide);
+                      },
+                    ),
                   ),
                 ],
               ),
@@ -400,7 +386,7 @@ class _AnimatedServiceCardState extends State<AnimatedServiceCard>
               borderRadius: BorderRadius.circular(14.5),
             ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Container(
                   padding: const EdgeInsets.all(8),
@@ -416,15 +402,17 @@ class _AnimatedServiceCardState extends State<AnimatedServiceCard>
                 const SizedBox(height: 12),
                 Text(
                   widget.title,
+                  textAlign: TextAlign.center,
                   style: const TextStyle(
                     color: AppTheme.textWhite,
                     fontWeight: FontWeight.bold,
-                    fontSize: 14,
+                    fontSize: 16,
                     height: 1.2,
                   ),
                 ),
                 const SizedBox(height: 8),
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
                       'Ver opciones',

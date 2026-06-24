@@ -139,7 +139,7 @@ class DriverReviewsScreen extends StatelessWidget {
   }
 
   Widget _buildReviewTile(Map<String, dynamic> data) {
-    final rating = (data['rating'] as num?)?.toInt() ?? 0;
+    final rating = (data['stars'] as num?)?.toInt() ?? 0;
     final comment = data['comment'] as String? ?? '';
     final date = (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
 

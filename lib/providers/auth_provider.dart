@@ -110,6 +110,9 @@ class AuthProvider extends ChangeNotifier {
     File? vehiclePhotoFront,
     File? vehiclePhotoBack,
     File? vehiclePhotoInterior,
+    String? bankName,
+    String? bankPhone,
+    String? bankDni,
   }) async {
     _isLoading = true;
     _error = null;
@@ -138,6 +141,9 @@ class AuthProvider extends ChangeNotifier {
         vehiclePhotoFront: vehiclePhotoFront,
         vehiclePhotoBack: vehiclePhotoBack,
         vehiclePhotoInterior: vehiclePhotoInterior,
+        bankName: bankName,
+        bankPhone: bankPhone,
+        bankDni: bankDni,
       );
       _isLoading = false;
       notifyListeners();

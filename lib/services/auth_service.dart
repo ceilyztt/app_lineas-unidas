@@ -77,6 +77,9 @@ class AuthService {
     File? vehiclePhotoFront,
     File? vehiclePhotoBack,
     File? vehiclePhotoInterior,
+    String? bankName,
+    String? bankPhone,
+    String? bankDni,
   }) async {
     try {
       final credential = await _auth.createUserWithEmailAndPassword(
@@ -133,6 +136,9 @@ class AuthService {
         vehiclePhotoFrontUrl: uploadedVehicleFrontUrl,
         vehiclePhotoBackUrl: uploadedVehicleBackUrl,
         vehiclePhotoInteriorUrl: uploadedVehicleInteriorUrl,
+        bankName: bankName,
+        bankPhone: bankPhone,
+        bankDni: bankDni,
         isApproved: false, 
         isAvailable: false,
         createdAt: DateTime.now(),

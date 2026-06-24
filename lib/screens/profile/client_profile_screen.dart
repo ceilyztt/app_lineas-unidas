@@ -211,38 +211,62 @@ class ClientProfileScreen extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          backgroundColor: AppTheme.surfaceColor,
-          title: const Text('Cambiar Contraseña', style: TextStyle(color: AppTheme.textWhite)),
-          content: Form(
-            key: formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: currentPasswordController,
-                  obscureText: true,
-                  style: const TextStyle(color: AppTheme.textWhite),
-                  decoration: const InputDecoration(labelText: 'Contraseña Actual'),
-                  validator: (v) => v!.isEmpty ? 'Requerido' : null,
+        bool obscureCurrent = true;
+        bool obscureNew = true;
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              backgroundColor: AppTheme.surfaceColor,
+              title: const Text('Cambiar Contraseña', style: TextStyle(color: AppTheme.textWhite)),
+              content: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: currentPasswordController,
+                      obscureText: obscureCurrent,
+                      style: const TextStyle(color: AppTheme.textWhite),
+                      decoration: InputDecoration(
+                        labelText: 'Contraseña Actual',
+                        suffixIcon: IconButton(
+                          icon: Icon(obscureCurrent ? Icons.visibility_off : Icons.visibility, color: AppTheme.textGrey),
+                          onPressed: () {
+                            setState(() {
+                              obscureCurrent = !obscureCurrent;
+                            });
+                          },
+                        ),
+                      ),
+                      validator: (v) => v!.isEmpty ? 'Requerido' : null,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: newPasswordController,
+                      obscureText: obscureNew,
+                      style: const TextStyle(color: AppTheme.textWhite),
+                      decoration: InputDecoration(
+                        labelText: 'Nueva Contraseña',
+                        suffixIcon: IconButton(
+                          icon: Icon(obscureNew ? Icons.visibility_off : Icons.visibility, color: AppTheme.textGrey),
+                          onPressed: () {
+                            setState(() {
+                              obscureNew = !obscureNew;
+                            });
+                          },
+                        ),
+                      ),
+                      validator: (v) => v!.length < 6 ? 'Mínimo 6 caracteres' : null,
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: newPasswordController,
-                  obscureText: true,
-                  style: const TextStyle(color: AppTheme.textWhite),
-                  decoration: const InputDecoration(labelText: 'Nueva Contraseña'),
-                  validator: (v) => v!.length < 6 ? 'Mínimo 6 caracteres' : null,
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar', style: TextStyle(color: AppTheme.textGrey)),
                 ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar', style: TextStyle(color: AppTheme.textGrey)),
-            ),
-            ElevatedButton(
+                ElevatedButton(
               onPressed: () async {
                 if (!formKey.currentState!.validate()) return;
                 
@@ -275,6 +299,8 @@ class ClientProfileScreen extends StatelessWidget {
               child: const Text('Guardar'),
             ),
           ],
+        );
+          },
         );
       },
     );

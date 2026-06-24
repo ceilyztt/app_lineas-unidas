@@ -5,6 +5,7 @@ import '../../config/theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/firestore_service.dart';
 import '../../models/ride_model.dart';
+import '../../providers/currency_provider.dart';
 
 class DriverEarningsScreen extends StatelessWidget {
   const DriverEarningsScreen({super.key});
@@ -12,6 +13,7 @@ class DriverEarningsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final driverId = Provider.of<AuthProvider>(context, listen: false).driverModel?.uid;
+    final bcvRate = Provider.of<CurrencyProvider>(context).bcvRate;
     
     if (driverId == null) {
       return const Scaffold(body: Center(child: Text("Error: No se encontró el conductor")));
@@ -78,7 +80,7 @@ class DriverEarningsScreen extends StatelessWidget {
             slivers: [
               // Dashboard superior
               SliverToBoxAdapter(
-                child: _buildDashboard(gananciaHoy, gananciaTotal, viajesCompletados),
+                child: _buildDashboard(gananciaHoy, gananciaTotal, viajesCompletados, bcvRate),
               ),
               
               // Título de Historial
@@ -111,7 +113,7 @@ class DriverEarningsScreen extends StatelessWidget {
                     (context, index) {
                       final fecha = fechasOrdenadas[index];
                       final viajesDelDia = viajesAgrupados[fecha]!;
-                      return _buildDiaCard(fecha, viajesDelDia, fechaHoy);
+                      return _buildDiaCard(fecha, viajesDelDia, fechaHoy, bcvRate);
                     },
                     childCount: fechasOrdenadas.length,
                   ),
@@ -125,7 +127,7 @@ class DriverEarningsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildDashboard(double gananciaHoy, double gananciaTotal, int totalViajes) {
+  Widget _buildDashboard(double gananciaHoy, double gananciaTotal, int totalViajes, double bcvRate) {
     return Container(
       margin: const EdgeInsets.all(24),
       padding: const EdgeInsets.all(20),
@@ -152,8 +154,9 @@ class DriverEarningsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            '${gananciaHoy.toStringAsFixed(2)} Bs',
-            style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w900),
+            '\$${gananciaHoy.toStringAsFixed(2)}\n${(gananciaHoy * bcvRate).toStringAsFixed(2)} Bs',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900, height: 1.2),
           ),
           const SizedBox(height: 24),
           const Divider(color: Colors.white24, height: 1),
@@ -161,7 +164,7 @@ class DriverEarningsScreen extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _buildEstatuto('TOTAL HISTÓRICO', '${gananciaTotal.toStringAsFixed(2)} Bs'),
+              _buildEstatuto('TOTAL HISTÓRICO', '\$${gananciaTotal.toStringAsFixed(2)}\n${(gananciaTotal * bcvRate).toStringAsFixed(2)} Bs'),
               Container(width: 1, height: 40, color: Colors.white24),
               _buildEstatuto('VIAJES COMPLETOS', totalViajes.toString()),
             ],
@@ -176,12 +179,12 @@ class DriverEarningsScreen extends StatelessWidget {
       children: [
         Text(titulo, style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold)),
         const SizedBox(height: 4),
-        Text(valor, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(valor, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
       ],
     );
   }
 
-  Widget _buildDiaCard(DateTime fecha, List<RideModel> viajes, DateTime fechaHoy) {
+  Widget _buildDiaCard(DateTime fecha, List<RideModel> viajes, DateTime fechaHoy, double bcvRate) {
     // Calcular ganancia de ese día
     double gananciaDia = viajes.fold(0.0, (sum, ride) => sum + (ride.fare ?? 0.0));
     
@@ -212,19 +215,23 @@ class DriverEarningsScreen extends StatelessWidget {
               style: const TextStyle(color: AppTheme.textWhite, fontWeight: FontWeight.bold, fontSize: 16),
             ),
             Text(
-              '+${gananciaDia.toStringAsFixed(2)} Bs',
-              style: const TextStyle(color: AppTheme.successGreen, fontWeight: FontWeight.bold, fontSize: 16),
+              '+\$${gananciaDia.toStringAsFixed(2)}\n+${(gananciaDia * bcvRate).toStringAsFixed(2)} Bs',
+              textAlign: TextAlign.right,
+              style: const TextStyle(color: AppTheme.successGreen, fontWeight: FontWeight.bold, fontSize: 14),
             ),
           ],
         ),
         subtitle: Text('${viajes.length} viaje(s)', style: const TextStyle(color: AppTheme.textGrey, fontSize: 12)),
-        children: viajes.map((ride) => _buildViajeDetalle(ride)).toList(),
+        children: viajes.map((ride) => _buildViajeDetalle(ride, bcvRate)).toList(),
       ),
     );
   }
 
-  Widget _buildViajeDetalle(RideModel ride) {
+  Widget _buildViajeDetalle(RideModel ride, double bcvRate) {
     final hora = ride.completedAt != null ? DateFormat('hh:mm a').format(ride.completedAt!) : '--:--';
+    final double fareUsd = ride.fare ?? 0.0;
+    final double fareBs = fareUsd * bcvRate;
+    
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: const BoxDecoration(
@@ -260,8 +267,9 @@ class DriverEarningsScreen extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Text(
-            '${(ride.fare ?? 0.0).toStringAsFixed(2)} Bs',
-            style: const TextStyle(color: AppTheme.textWhite, fontWeight: FontWeight.bold),
+            '\$${fareUsd.toStringAsFixed(2)}\n${fareBs.toStringAsFixed(2)} Bs',
+            textAlign: TextAlign.right,
+            style: const TextStyle(color: AppTheme.textWhite, fontWeight: FontWeight.bold, fontSize: 13),
           ),
         ],
       ),

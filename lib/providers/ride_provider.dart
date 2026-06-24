@@ -371,11 +371,8 @@ class RideProvider extends ChangeNotifier {
   }
 
   Future<void> completeTrip(String rideId, double distanceKm) async {
-    final fare = await _firestoreService.calculateFare(distanceKm);
-
     await _firestoreService.updateRide(rideId, {
       'status': RideStatus.completed.name,
-      'fare': fare,
       'distance': distanceKm,
       'completedAt': Timestamp.now(),
     });
