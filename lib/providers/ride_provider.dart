@@ -6,7 +6,6 @@ import 'package:geolocator/geolocator.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/ride_model.dart';
 import '../models/driver_model.dart';
-import '../models/message_model.dart';
 import '../services/firestore_service.dart';
 import '../services/location_service.dart';
 import '../services/notification_service.dart';
@@ -21,10 +20,7 @@ class RideProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _error;
   StreamSubscription? _rideSubscription;
-  StreamSubscription? _messagesSubscription;
   StreamSubscription? _driverSubscription;
-  List<MessageModel> _previousMessages = [];
-  bool _isFirstMessagesLoad = true;
 
   RideModel? get currentRide => _currentRide;
   DriverModel? get assignedDriver => _assignedDriver;
@@ -156,7 +152,7 @@ class RideProvider extends ChangeNotifier {
         recipientId: nearestDriver.uid,
         title: '¡Nueva solicitud de carrera! 🚕',
         body: '${ride.clientName} ha solicitado un taxi.',
-        data: {'rideId': ride.rideId},
+        data: {'rideId': ride.rideId, 'type': 'request'},
       );
 
       return true;
@@ -178,19 +174,14 @@ class RideProvider extends ChangeNotifier {
     _rideSubscription?.cancel();
     _rideSubscription = _firestoreService.streamRide(rideId).listen((ride) {
       if (ride != null) {
-        // Detectar cambios de estado para notificar al pasajero
-        if (_currentRide != null && _currentRide!.status != ride.status) {
-          _notifyPassengerOfStatusChange(ride);
-        }
-        
         // --- INICIO LÓGICA DE TIMEOUT ---
         _driverRequestTimer?.cancel();
         
-        // Si el viaje está 'requested' y tiene un driver asignado, iniciamos timer de 20s.
+        // Si el viaje está 'requested' y tiene un driver asignado, iniciamos timer de 45s.
         // Esto ocurrirá cada vez que Firestore se actualice (ej: al asignar un nuevo conductor).
         if (ride.status == RideStatus.requested && ride.driverId != null) {
           final assignedDriverId = ride.driverId!;
-          _driverRequestTimer = Timer(const Duration(seconds: 20), () async {
+          _driverRequestTimer = Timer(const Duration(seconds: 45), () async {
             // Verificamos si sigue en 'requested' con el mismo conductor
             if (_currentRide != null && 
                 _currentRide!.status == RideStatus.requested && 
@@ -212,12 +203,6 @@ class RideProvider extends ChangeNotifier {
           _assignedDriver = null;
         }
 
-        // Si no estábamos escuchando los mensajes de este viaje, empezar a hacerlo
-        if (_currentRide == null || _currentRide!.rideId != ride.rideId) {
-          final currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
-          _listenToMessages(ride.rideId, currentUserId);
-        }
-
         _currentRide = ride;
         notifyListeners();
       }
@@ -232,80 +217,50 @@ class RideProvider extends ChangeNotifier {
     });
   }
 
-  void _listenToMessages(String rideId, String currentUserId) {
-    _messagesSubscription?.cancel();
-    _isFirstMessagesLoad = true;
-    _previousMessages = [];
-    _messagesSubscription = _firestoreService.streamMessages(rideId).listen((messages) {
-      if (_isFirstMessagesLoad) {
-        _previousMessages = messages;
-        _isFirstMessagesLoad = false;
-        return;
+  Future<void> _sendStatusPushToPassenger(String rideId, RideStatus status) async {
+    try {
+      final doc = await FirebaseFirestore.instance.collection('rides').doc(rideId).get();
+      if (!doc.exists || doc.data() == null) return;
+      final ride = RideModel.fromMap(doc.data()!);
+
+      String? title;
+      String? body;
+
+      switch (status) {
+        case RideStatus.accepted:
+          title = '¡Conductor encontrado!';
+          body = '${ride.driverName ?? 'Un conductor'} ha aceptado tu solicitud.';
+          break;
+        case RideStatus.driverOnWay:
+          title = '¡Conductor en camino!';
+          body = '${ride.driverName ?? 'El conductor'} va en camino a tu ubicación.';
+          break;
+        case RideStatus.inProgress:
+          title = '¡Viaje iniciado!';
+          body = 'Estás en camino a tu destino. ¡Disfruta del viaje!';
+          break;
+        case RideStatus.completed:
+          title = '¡Viaje finalizado!';
+          body = 'Has llegado a tu destino. Procede a realizar el pago de \$${ride.fare?.toStringAsFixed(2) ?? '0.00'}.';
+          break;
+        case RideStatus.cancelled:
+          title = 'Viaje cancelado';
+          body = 'Tu solicitud de viaje ha sido cancelada.';
+          break;
+        default:
+          break;
       }
 
-      // Solo notificar si la pantalla de chat no está abierta en este viaje
-      if (NotificationService.isChatOpen && NotificationService.activeRideId == rideId) {
-        _previousMessages = messages;
-        return;
+      if (title != null && body != null) {
+        await _notificationService.sendPushNotification(
+          recipientId: ride.clientId,
+          title: title,
+          body: body,
+          data: {'rideId': ride.rideId, 'type': 'status'},
+        );
       }
-
-      for (var message in messages) {
-        final wasNotified = _previousMessages.any((m) => m.id == message.id);
-        if (!wasNotified && message.senderId != currentUserId) {
-          _notificationService.showLocalNotification(
-            title: 'Mensaje de chat 💬',
-            body: message.text,
-            payload: rideId,
-          );
-        }
-      }
-      _previousMessages = messages;
-    });
-  }
-
-  void _notifyPassengerOfStatusChange(RideModel ride) {
-    String? title;
-    String? body;
-
-    switch (ride.status) {
-      case RideStatus.accepted:
-        title = '¡Conductor encontrado!';
-        body = '${ride.driverName ?? 'Un conductor'} ha aceptado tu solicitud.';
-        break;
-      case RideStatus.driverOnWay:
-        title = '¡Conductor en camino!';
-        body = '${ride.driverName ?? 'El conductor'} va en camino a tu ubicación.';
-        break;
-      case RideStatus.inProgress:
-        title = '¡Viaje iniciado!';
-        body = 'Estás en camino a tu destino. ¡Disfruta del viaje!';
-        break;
-      case RideStatus.completed:
-        title = '¡Viaje finalizado!';
-        body = 'Has llegado a tu destino. Procede a realizar el pago de \$${ride.fare?.toStringAsFixed(2) ?? '0.00'}.';
-        break;
-      case RideStatus.cancelled:
-        title = 'Viaje cancelado';
-        body = 'Tu solicitud de viaje ha sido cancelada.';
-        break;
-      default:
-        break;
-    }
-
-    if (title != null && body != null) {
-      _notificationService.showLocalNotification(
-        title: title,
-        body: body,
-        payload: ride.rideId,
-      );
-
-      // Enviar push notification al pasajero (cliente)
-      _notificationService.sendPushNotification(
-        recipientId: ride.clientId,
-        title: title,
-        body: body,
-        data: {'rideId': ride.rideId},
-      );
+    } catch (e) {
+      debugPrint("Error sending status push to passenger: $e");
     }
   }
 
@@ -317,6 +272,7 @@ class RideProvider extends ChangeNotifier {
       'driverId': driverId,
       'acceptedAt': Timestamp.now(),
     });
+    await _sendStatusPushToPassenger(rideId, RideStatus.accepted);
   }
 
   Future<void> rejectRide(String rideId, String driverId) async {
@@ -389,7 +345,7 @@ class RideProvider extends ChangeNotifier {
           recipientId: nearestDriver.uid,
           title: '¡Nueva solicitud de carrera! 🚕',
           body: '${ride.clientName} ha solicitado un taxi.',
-          data: {'rideId': rideId},
+          data: {'rideId': rideId, 'type': 'request'},
         );
       } else {
         // En caso extremo, cancelar en un solo update
@@ -405,6 +361,15 @@ class RideProvider extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('Error en rejectRide: $e');
+      final context = NotificationService.navigatorKey.currentContext;
+      if (context != null && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al rechazar viaje: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -414,12 +379,14 @@ class RideProvider extends ChangeNotifier {
     await _firestoreService.updateRide(rideId, {
       'status': RideStatus.driverOnWay.name,
     });
+    await _sendStatusPushToPassenger(rideId, RideStatus.driverOnWay);
   }
 
   Future<void> startTrip(String rideId) async {
     await _firestoreService.updateRide(rideId, {
       'status': RideStatus.inProgress.name,
     });
+    await _sendStatusPushToPassenger(rideId, RideStatus.inProgress);
   }
 
   Future<void> completeTrip(String rideId, double distanceKm) async {
@@ -428,12 +395,42 @@ class RideProvider extends ChangeNotifier {
       'distance': distanceKm,
       'completedAt': Timestamp.now(),
     });
+    await _sendStatusPushToPassenger(rideId, RideStatus.completed);
   }
 
   Future<void> cancelRide(String rideId) async {
-    await _firestoreService.updateRide(rideId, {
-      'status': RideStatus.cancelled.name,
-    });
+    try {
+      final doc = await FirebaseFirestore.instance.collection('rides').doc(rideId).get();
+      if (doc.exists && doc.data() != null) {
+        final ride = RideModel.fromMap(doc.data()!);
+        final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+
+        await _firestoreService.updateRide(rideId, {
+          'status': RideStatus.cancelled.name,
+        });
+
+        // Si el cliente cancela, notificar al conductor
+        if (currentUserId == ride.clientId && ride.driverId != null) {
+          _notificationService.sendPushNotification(
+            recipientId: ride.driverId!,
+            title: 'Viaje cancelado ❌',
+            body: 'El cliente ha cancelado el viaje.',
+            data: {'rideId': rideId, 'type': 'cancel'},
+          );
+        }
+        // Si el conductor cancela, notificar al cliente
+        else if (currentUserId == ride.driverId) {
+          _notificationService.sendPushNotification(
+            recipientId: ride.clientId,
+            title: 'Viaje cancelado ❌',
+            body: 'El conductor ha cancelado el viaje.',
+            data: {'rideId': rideId, 'type': 'cancel'},
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint("Error in cancelRide: $e");
+    }
     _currentRide = null;
     _assignedDriver = null;
     notifyListeners();
@@ -442,20 +439,16 @@ class RideProvider extends ChangeNotifier {
   // Limpiar estado
   void clearRide() {
     _rideSubscription?.cancel();
-    _messagesSubscription?.cancel();
     _driverSubscription?.cancel();
     _currentRide = null;
     _assignedDriver = null;
     _error = null;
-    _previousMessages = [];
-    _isFirstMessagesLoad = true;
     notifyListeners();
   }
 
   @override
   void dispose() {
     _rideSubscription?.cancel();
-    _messagesSubscription?.cancel();
     _driverSubscription?.cancel();
     super.dispose();
   }

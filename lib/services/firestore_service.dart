@@ -46,16 +46,26 @@ class FirestoreService {
 
   // Obtener conductores disponibles
   Future<List<DriverModel>> getAvailableDrivers() async {
-    final snapshot = await _firestore
-        .collection('drivers')
-        .where('isAvailable', isEqualTo: true)
-        .where('isApproved', isEqualTo: true)
-        .get();
+    try {
+      final snapshot = await _firestore
+          .collection('drivers')
+          .where('isAvailable', isEqualTo: true)
+          .where('isApproved', isEqualTo: true)
+          .get();
 
-    return snapshot.docs
-        .map((doc) => DriverModel.fromMap(doc.data()))
-        .where((d) => d.isSuspended != true)
-        .toList();
+      final List<DriverModel> list = [];
+      for (var doc in snapshot.docs) {
+        try {
+          list.add(DriverModel.fromMap(doc.data()));
+        } catch (e) {
+          debugPrint("Error parsing driver ${doc.id}: $e");
+        }
+      }
+      return list.where((d) => d.isSuspended != true).toList();
+    } catch (e) {
+      debugPrint("Error in getAvailableDrivers: $e");
+      return [];
+    }
   }
 
   // Actualizar ubicación del conductor
@@ -121,10 +131,17 @@ class FirestoreService {
         .where('driverId', isEqualTo: driverId)
         .where('status', whereIn: ['accepted', 'driverOnWay', 'inProgress', 'completed'])
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => RideModel.fromMap(doc.data()))
-            .where((ride) => ride.status != RideStatus.completed || ride.paymentStatus != 'confirmed')
-            .toList());
+        .map((snapshot) {
+      final List<RideModel> list = [];
+      for (var doc in snapshot.docs) {
+        try {
+          list.add(RideModel.fromMap(doc.data()));
+        } catch (e) {
+          debugPrint("Error parsing active ride ${doc.id}: $e");
+        }
+      }
+      return list.where((ride) => ride.status != RideStatus.completed || ride.paymentStatus != 'confirmed').toList();
+    });
   }
 
   // Solicitudes pendientes para conductores (viajes solicitados asignados a este conductor)
@@ -134,9 +151,17 @@ class FirestoreService {
         .where('status', isEqualTo: 'requested')
         .where('driverId', isEqualTo: driverId)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => RideModel.fromMap(doc.data()))
-            .toList());
+        .map((snapshot) {
+      final List<RideModel> list = [];
+      for (var doc in snapshot.docs) {
+        try {
+          list.add(RideModel.fromMap(doc.data()));
+        } catch (e) {
+          debugPrint("Error parsing pending ride ${doc.id}: $e");
+        }
+      }
+      return list;
+    });
   }
 
   // Ganancias del conductor (todos los viajes completados)

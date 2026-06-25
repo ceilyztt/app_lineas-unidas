@@ -56,33 +56,12 @@ service cloud.firestore {
 
     // Colección: Viajes (Rides)
     match /rides/{rideId} {
-      // Lectura: Pasajeros y conductores pueden leer los viajes
-      allow read: if isAuth();
-
-      // Creación: Solo el pasajero que inicia el viaje puede crearlo
-      allow create: if isAuth() && request.resource.data.clientId == request.auth.uid;
-
-      // Actualización: 
-      // 1. El pasajero puede cancelar el viaje.
-      // 2. El conductor puede actualizar si se le asigna el viaje o lo está gestionando.
-      allow update: if isAuth() && (
-        resource.data.clientId == request.auth.uid || 
-        request.resource.data.driverId == request.auth.uid ||
-        resource.data.driverId == request.auth.uid ||
-        resource.data.driverId == null
-      );
-
-      // Eliminación: Los viajes no se borran, cambian a estado "cancelled" o "completed"
-      allow delete: if false;
+      // Permitir leer y escribir a cualquier usuario autenticado (conductores y pasajeros)
+      allow read, write: if isAuth();
       
       // Subcolección: Chat del Viaje
       match /messages/{messageId} {
-        // Solo pueden leer, escribir y actualizar el cliente que pidió el viaje y el conductor asignado
-        allow read, create, update: if isAuth() && (
-          get(/databases/$(database)/documents/rides/$(rideId)).data.clientId == request.auth.uid ||
-          get(/databases/$(database)/documents/rides/$(rideId)).data.driverId == request.auth.uid
-        );
-        allow delete: if false;
+        allow read, write: if isAuth();
       }
     }
 

@@ -86,7 +86,7 @@ class _ChatScreenState extends State<ChatScreen> {
           recipientId: recipientId,
           title: '$senderName 💬',
           body: text,
-          data: {'rideId': _rideId},
+          data: {'rideId': _rideId, 'type': 'chat'},
         );
       } catch (e) {
         debugPrint("Error sending chat push: $e");

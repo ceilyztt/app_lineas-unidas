@@ -32,38 +32,38 @@ class NotificationService {
       // Registrar listener de click/tap en las notificaciones
       OneSignal.Notifications.addClickListener((event) {
         debugPrint("OneSignal notification clicked: ${event.notification.title}");
-        
-        void navigate() {
-          final context = navigatorKey.currentContext;
-          if (context != null) {
-            try {
-              final authProvider = Provider.of<AuthProvider>(context, listen: false);
-              if (authProvider.isLoggedIn) {
-                final role = authProvider.userRole;
-                if (role == 'driver') {
-                  navigatorKey.currentState?.pushNamedAndRemoveUntil(
-                    '/driver/home',
-                    (route) => false,
-                  );
-                } else if (role == 'client') {
-                  navigatorKey.currentState?.pushNamedAndRemoveUntil(
-                    '/client/home',
-                    (route) => false,
-                  );
-                }
-              }
-            } catch (e) {
-              debugPrint("Error navigating from notification click: $e");
+        final data = event.notification.additionalData;
+        final rideId = data?['rideId']?.toString();
+        final type = data?['type']?.toString();
+
+        if (type == 'chat' && rideId != null && rideId.isNotEmpty) {
+          void navigateChat() {
+            final context = navigatorKey.currentContext;
+            if (context != null) {
+              navigatorKey.currentState?.pushNamed('/chat', arguments: rideId);
+            } else {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                navigateChat();
+              });
             }
-          } else {
-            // Reintentar en el siguiente frame si el context no está listo (cold start)
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              navigate();
-            });
           }
+          navigateChat();
+        } else {
+          navigateToHome();
         }
-        
-        navigate();
+      });
+
+      // Prevenir mostrar banners de notificación push en primer plano cuando no es necesario
+      OneSignal.Notifications.addForegroundWillDisplayListener((event) {
+        final data = event.notification.additionalData;
+        final rideId = data?['rideId']?.toString();
+        final type = data?['type']?.toString();
+
+        if (type == 'chat' && isChatOpen && activeRideId == rideId) {
+          event.preventDefault();
+        } else if (type == 'request') {
+          event.preventDefault();
+        }
       });
     } catch (e) {
       debugPrint("OneSignal initialization error: $e");
@@ -215,10 +215,55 @@ class NotificationService {
     // Esto se puede conectar con el router de la app
   }
 
+  static void navigateToHome() {
+    final context = navigatorKey.currentContext;
+    if (context != null) {
+      try {
+        final authProvider = Provider.of<AuthProvider>(context, listen: false);
+        if (authProvider.isLoggedIn) {
+          final role = authProvider.userRole;
+          if (role == 'driver') {
+            navigatorKey.currentState?.pushNamedAndRemoveUntil(
+              '/driver/home',
+              (route) => false,
+            );
+          } else if (role == 'client') {
+            navigatorKey.currentState?.pushNamedAndRemoveUntil(
+              '/client/home',
+              (route) => false,
+            );
+          }
+        }
+      } catch (e) {
+        debugPrint("Error navigating to home: $e");
+      }
+    } else {
+      // Reintentar en el siguiente frame si el context no está listo (cold start)
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        navigateToHome();
+      });
+    }
+  }
+
   static void _handleNotificationTap(NotificationResponse response) {
     final payload = response.payload;
     if (payload != null && payload.isNotEmpty) {
-      navigatorKey.currentState?.pushNamed('/chat', arguments: payload);
+      if (payload.startsWith('chat|')) {
+        final rideId = payload.substring(5);
+        void navigateChat() {
+          final context = navigatorKey.currentContext;
+          if (context != null) {
+            navigatorKey.currentState?.pushNamed('/chat', arguments: rideId);
+          } else {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              navigateChat();
+            });
+          }
+        }
+        navigateChat();
+      } else {
+        navigateToHome();
+      }
     }
   }
 
@@ -245,6 +290,7 @@ class NotificationService {
           'target_channel': 'push',
           'priority': 10,
           'small_icon': 'launcher_icon',
+          'large_icon': 'launcher_icon',
           'headings': {'es': title, 'en': title},
           'contents': {'es': body, 'en': body},
           'data': data,

@@ -797,7 +797,7 @@ class RideRequestCard extends StatefulWidget {
 }
 
 class _RideRequestCardState extends State<RideRequestCard> {
-  int _timeLeft = 15;
+  int _timeLeft = 40;
   Timer? _timer;
 
   @override
@@ -885,16 +885,16 @@ class _RideRequestCardState extends State<RideRequestCard> {
                       width: 50,
                       height: 50,
                       child: CircularProgressIndicator(
-                        value: _timeLeft / 15,
+                        value: _timeLeft / 40,
                         backgroundColor: AppTheme.backgroundColor,
-                        color: _timeLeft <= 5 ? AppTheme.errorRed : AppTheme.primaryColor,
+                        color: _timeLeft <= 10 ? AppTheme.errorRed : AppTheme.primaryColor,
                         strokeWidth: 5,
                       ),
                     ),
                     Text(
                       '${_timeLeft}s',
                       style: TextStyle(
-                        color: _timeLeft <= 5 ? AppTheme.errorRed : AppTheme.textWhite,
+                        color: _timeLeft <= 10 ? AppTheme.errorRed : AppTheme.textWhite,
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
                       ),
@@ -997,6 +997,8 @@ class _RideRequestCardState extends State<RideRequestCard> {
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppTheme.errorRed,
                       side: const BorderSide(color: AppTheme.errorRed),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                     ),
                     child: const Text('RECHAZAR'),
                   ),
@@ -1015,6 +1017,10 @@ class _RideRequestCardState extends State<RideRequestCard> {
                         authProvider.firebaseUser!.uid,
                       );
                     },
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                    ),
                     child: const Text('ACEPTAR'),
                   ),
                 ),
@@ -1256,78 +1262,6 @@ class ActiveRideCard extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 6),
-            Container(
-              padding: const EdgeInsets.all(8),
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: AppTheme.backgroundColor.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.cardColor.withValues(alpha: 0.5)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'INFO DEPURACIÓN:',
-                    style: TextStyle(color: AppTheme.primaryColor, fontSize: 9, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '• ID Viaje: ${ride.rideId}',
-                    style: const TextStyle(color: AppTheme.textGrey, fontSize: 9, fontFamily: 'monospace'),
-                  ),
-                  Text(
-                    '• ID Conductor Viaje: ${ride.driverId}',
-                    style: const TextStyle(color: AppTheme.textGrey, fontSize: 9, fontFamily: 'monospace'),
-                  ),
-                  const SizedBox(height: 6),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 28,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.errorRed,
-                        padding: EdgeInsets.zero,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                      ),
-                      onPressed: () async {
-                        final firestoreService = FirestoreService();
-                        try {
-                          await firestoreService.updateRide(ride.rideId, {
-                            'paymentStatus': 'confirmed',
-                            'status': RideStatus.completed.name,
-                          });
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Viaje de prueba forzado a completado/confirmado.'),
-                                backgroundColor: AppTheme.successGreen,
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Error al forzar cierre: $e'),
-                                backgroundColor: AppTheme.errorRed,
-                              ),
-                            );
-                          }
-                        }
-                      },
-                      child: const Text(
-                        'FORZAR CIERRE DE VIAJE (TEST)',
-                        style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
             Row(
               children: [
                 const Icon(Icons.my_location, color: AppTheme.successGreen, size: 16),
