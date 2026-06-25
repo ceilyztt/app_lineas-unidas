@@ -21,6 +21,7 @@ class DriverProvider extends ChangeNotifier {
   List<RideModel> _previousActiveRides = [];
   List<MessageModel> _previousMessages = [];
   bool _isFirstMessagesLoad = true;
+  bool _isFirstRequestsLoad = true;
   String? _currentActiveRideId;
 
   DriverModel? get driver => _driver;
@@ -38,7 +39,14 @@ class DriverProvider extends ChangeNotifier {
 
     // Escuchar solicitudes pendientes
     _requestsSubscription?.cancel();
+    _isFirstRequestsLoad = true;
     _requestsSubscription = _firestoreService.streamPendingRideRequests(uid).listen((requests) {
+      if (_isFirstRequestsLoad) {
+        _previousPendingRequests = requests;
+        _isFirstRequestsLoad = false;
+        return;
+      }
+
       // Si llega una nueva solicitud que no estaba antes en la lista, notificar al conductor
       for (var request in requests) {
         final wasPending = _previousPendingRequests.any((r) => r.rideId == request.rideId);
@@ -145,6 +153,7 @@ class DriverProvider extends ChangeNotifier {
     _currentActiveRideId = null;
     _previousMessages = [];
     _isFirstMessagesLoad = true;
+    _isFirstRequestsLoad = true;
     notifyListeners();
   }
 

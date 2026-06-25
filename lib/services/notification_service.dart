@@ -4,6 +4,8 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:onesignal_flutter/onesignal_flutter.dart';
 import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
+import '../providers/auth_provider.dart';
 
 class NotificationService {
   // Patrón Singleton
@@ -21,7 +23,53 @@ class NotificationService {
 
   // Inicializar notificaciones
   Future<void> initialize() async {
-    // 1. Solicitar permisos de Firebase Messaging (FCM) de forma segura
+    // 1. Inicializar OneSignal de forma segura (Primero para evitar bloqueos por FCM)
+    try {
+      OneSignal.Debug.setLogLevel(OSLogLevel.verbose);
+      OneSignal.initialize("352cd696-af6e-4e40-9e75-0623b5b6314f");
+      OneSignal.Notifications.requestPermission(true);
+
+      // Registrar listener de click/tap en las notificaciones
+      OneSignal.Notifications.addClickListener((event) {
+        debugPrint("OneSignal notification clicked: ${event.notification.title}");
+        
+        void navigate() {
+          final context = navigatorKey.currentContext;
+          if (context != null) {
+            try {
+              final authProvider = Provider.of<AuthProvider>(context, listen: false);
+              if (authProvider.isLoggedIn) {
+                final role = authProvider.userRole;
+                if (role == 'driver') {
+                  navigatorKey.currentState?.pushNamedAndRemoveUntil(
+                    '/driver/home',
+                    (route) => false,
+                  );
+                } else if (role == 'client') {
+                  navigatorKey.currentState?.pushNamedAndRemoveUntil(
+                    '/client/home',
+                    (route) => false,
+                  );
+                }
+              }
+            } catch (e) {
+              debugPrint("Error navigating from notification click: $e");
+            }
+          } else {
+            // Reintentar en el siguiente frame si el context no está listo (cold start)
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              navigate();
+            });
+          }
+        }
+        
+        navigate();
+      });
+    } catch (e) {
+      debugPrint("OneSignal initialization error: $e");
+    }
+
+    // 2. Solicitar permisos de Firebase Messaging (FCM) de forma segura
     try {
       await _messaging.requestPermission(
         alert: true,
@@ -32,9 +80,9 @@ class NotificationService {
       debugPrint("FCM requestPermission error: $e");
     }
 
-    // 2. Configurar notificaciones locales de forma segura
+    // 3. Configurar notificaciones locales de forma segura
     try {
-      const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const androidSettings = AndroidInitializationSettings('@mipmap/launcher_icon');
       const iosSettings = DarwinInitializationSettings(
         requestAlertPermission: true,
         requestBadgePermission: true,
@@ -58,7 +106,7 @@ class NotificationService {
       debugPrint("Local notifications initialize/permission error: $e");
     }
 
-    // 3. Crear canal de notificación para Android de forma segura
+    // 4. Crear canal de notificación para Android de forma segura
     try {
       const androidChannel = AndroidNotificationChannel(
         'lineas_unidas_channel',
@@ -75,21 +123,12 @@ class NotificationService {
       debugPrint("Create notification channel error: $e");
     }
 
-    // 4. Registrar escuchas de Firebase Messaging de forma segura
+    // 5. Registrar escuchas de Firebase Messaging de forma segura
     try {
       FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
       FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageOpenedApp);
     } catch (e) {
       debugPrint("Firebase Messaging listen error: $e");
-    }
-
-    // 5. Inicializar OneSignal de forma segura
-    try {
-      OneSignal.Debug.setLogLevel(OSLogLevel.verbose);
-      OneSignal.initialize("352cd696-af6e-4e40-9e75-0623b5b6314f");
-      OneSignal.Notifications.requestPermission(true);
-    } catch (e) {
-      debugPrint("OneSignal initialization error: $e");
     }
   }
 
@@ -196,7 +235,7 @@ class NotificationService {
         url,
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Basic 02d36bc6-f1c2-418d-a9f8-0b0c3bca08cf',
+          'Authorization': 'Key os_v2_app_guwnnfvpnzhebhtvayr3lnrrj6v4apldavaucz45nvz3lkbsjtcykqos4ptidebpfyyul6ev6vltcmbkptsgs7scktnknr2q3h3h4fy',
         },
         body: jsonEncode({
           'app_id': '352cd696-af6e-4e40-9e75-0623b5b6314f',
@@ -204,6 +243,8 @@ class NotificationService {
             'external_id': [recipientId],
           },
           'target_channel': 'push',
+          'priority': 10,
+          'small_icon': 'launcher_icon',
           'headings': {'es': title, 'en': title},
           'contents': {'es': body, 'en': body},
           'data': data,

@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
         android:label="lineas_unidas"
@@ -42,6 +44,11 @@
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="PUEDES_PEGAR_AQUI_TU_API_KEY_DE_GOOGLE_MAPS" />
+
+        <!-- Sets the default notification icon for OneSignal -->
+        <meta-data 
+            android:name="com.onesignal.messaging.default_notification_icon" 
+            android:resource="@mipmap/launcher_icon" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

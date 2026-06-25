@@ -57,6 +57,18 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     } catch (_) {}
 
+    // Recuperación dinámica de Firestore si no está cargado localmente
+    if (recipientId == null) {
+      try {
+        final ride = await _firestoreService.getRide(_rideId);
+        if (ride != null) {
+          recipientId = (userId == ride.clientId) ? ride.driverId : ride.clientId;
+        }
+      } catch (e) {
+        debugPrint("Error fetching ride for recipient: $e");
+      }
+    }
+
     final message = MessageModel(
       id: '', // Firestore genera el ID
       senderId: userId,
@@ -67,11 +79,12 @@ class _ChatScreenState extends State<ChatScreen> {
     _messageController.clear();
     await _firestoreService.sendMessage(_rideId, message);
 
-    if (recipientId != null) {
+    if (recipientId != null && recipientId.isNotEmpty) {
       try {
+        final senderName = authProvider.userModel?.name ?? authProvider.driverModel?.name ?? 'Mensaje nuevo';
         NotificationService().sendPushNotification(
           recipientId: recipientId,
-          title: 'Mensaje de chat 💬',
+          title: '$senderName 💬',
           body: text,
           data: {'rideId': _rideId},
         );

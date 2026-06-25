@@ -84,6 +84,14 @@ class FirestoreService {
     await _firestore.collection('rides').doc(rideId).update(data);
   }
 
+  Future<RideModel?> getRide(String rideId) async {
+    final doc = await _firestore.collection('rides').doc(rideId).get();
+    if (doc.exists && doc.data() != null) {
+      return RideModel.fromMap(doc.data()!);
+    }
+    return null;
+  }
+
   Stream<RideModel?> streamRide(String rideId) {
     return _firestore.collection('rides').doc(rideId).snapshots().map((doc) {
       if (doc.exists && doc.data() != null) {
