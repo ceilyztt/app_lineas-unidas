@@ -42,6 +42,7 @@ class DriverModel {
   final String? rejectionReason;
   final bool isSuspended;
   final String? suspensionReason;
+  final bool isDeleted;
 
   // Datos de Pago Móvil
   final String? bankName;
@@ -86,6 +87,7 @@ class DriverModel {
     this.rejectionReason,
     this.isSuspended = false,
     this.suspensionReason,
+    this.isDeleted = false,
   });
 
   Map<String, dynamic> toMap() {
@@ -127,6 +129,7 @@ class DriverModel {
       'rejectionReason': rejectionReason,
       'isSuspended': isSuspended,
       'suspensionReason': suspensionReason,
+      'isDeleted': isDeleted,
     };
   }
 
@@ -169,6 +172,7 @@ class DriverModel {
       rejectionReason: map['rejectionReason'],
       isSuspended: map['isSuspended'] ?? false,
       suspensionReason: map['suspensionReason'],
+      isDeleted: map['isDeleted'] ?? false,
     );
   }
 
@@ -210,6 +214,7 @@ class DriverModel {
     String? rejectionReason,
     bool? isSuspended,
     String? suspensionReason,
+    bool? isDeleted,
   }) {
     return DriverModel(
       uid: uid ?? this.uid,
@@ -249,6 +254,7 @@ class DriverModel {
       rejectionReason: rejectionReason ?? this.rejectionReason,
       isSuspended: isSuspended ?? this.isSuspended,
       suspensionReason: suspensionReason ?? this.suspensionReason,
+      isDeleted: isDeleted ?? this.isDeleted,
     );
   }
 }

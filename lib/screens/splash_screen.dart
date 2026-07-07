@@ -82,6 +82,9 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       }
       Navigator.pushNamedAndRemoveUntil(context, route, (route) => false);
     } else {
+      if (authProvider.isLoggedIn) {
+        authProvider.signOut();
+      }
       Navigator.pushNamedAndRemoveUntil(context, AppRoutes.login, (route) => false);
     }
   }

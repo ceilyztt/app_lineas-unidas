@@ -61,7 +61,7 @@ class FirestoreService {
           debugPrint("Error parsing driver ${doc.id}: $e");
         }
       }
-      return list.where((d) => d.isSuspended != true).toList();
+      return list.where((d) => d.isSuspended != true && d.isDeleted != true).toList();
     } catch (e) {
       debugPrint("Error in getAvailableDrivers: $e");
       return [];

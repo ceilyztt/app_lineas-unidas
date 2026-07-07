@@ -589,11 +589,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                   
                   const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
+                   DropdownButtonFormField<String>(
                     value: _mechanicalCondition,
+                    isExpanded: true,
                     dropdownColor: AppTheme.surfaceColor,
                     style: const TextStyle(color: AppTheme.textWhite),
-                    decoration: const InputDecoration(labelText: 'Condición Mecánica', prefixIcon: Icon(Icons.build_circle_outlined)),
+                    decoration: const InputDecoration(
+                      labelText: 'Condición Mecánica',
+                      prefixIcon: Icon(Icons.build_circle_outlined),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                    ),
                     items: _mechOptions.map((opt) => DropdownMenuItem(value: opt, child: Text(opt))).toList(),
                     onChanged: (val) => setState(() => _mechanicalCondition = val!),
                   ),
@@ -604,9 +609,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       Expanded(
                         child: DropdownButtonFormField<String>(
                           value: _cleanlinessLevel,
+                          isExpanded: true,
                           dropdownColor: AppTheme.surfaceColor,
                           style: const TextStyle(color: AppTheme.textWhite),
-                          decoration: const InputDecoration(labelText: 'Limpieza', prefixIcon: Icon(Icons.cleaning_services_outlined)),
+                          decoration: const InputDecoration(
+                            labelText: 'Limpieza',
+                            prefixIcon: Icon(Icons.cleaning_services_outlined),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                          ),
                           items: _cleanOptions.map((opt) => DropdownMenuItem(value: opt, child: Text(opt))).toList(),
                           onChanged: (val) => setState(() => _cleanlinessLevel = val!),
                         ),
@@ -615,9 +625,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       Expanded(
                         child: DropdownButtonFormField<String>(
                           value: _seatingMaterial,
+                          isExpanded: true,
                           dropdownColor: AppTheme.surfaceColor,
                           style: const TextStyle(color: AppTheme.textWhite),
-                          decoration: const InputDecoration(labelText: 'Asientos', prefixIcon: Icon(Icons.chair_outlined)),
+                          decoration: const InputDecoration(
+                            labelText: 'Asientos',
+                            prefixIcon: Icon(Icons.chair_outlined),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                          ),
                           items: _seatOptions.map((opt) => DropdownMenuItem(value: opt, child: Text(opt))).toList(),
                           onChanged: (val) => setState(() => _seatingMaterial = val!),
                         ),

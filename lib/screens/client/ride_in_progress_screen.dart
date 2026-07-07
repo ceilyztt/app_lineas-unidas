@@ -21,12 +21,46 @@ class RideInProgressScreen extends StatefulWidget {
   State<RideInProgressScreen> createState() => _RideInProgressScreenState();
 }
 
-class _RideInProgressScreenState extends State<RideInProgressScreen> {
+class _RideInProgressScreenState extends State<RideInProgressScreen> with SingleTickerProviderStateMixin {
   final FirestoreService _firestoreService = FirestoreService();
+  final MapController _mapController = MapController();
   List<LatLng> _routePoints = [];
   bool _isLoadingRoute = false;
   String? _lastDriverId;
   LatLng? _lastDriverRoutePos;
+
+  // Animación del marcador del conductor
+  AnimationController? _driverMarkerAnimController;
+  LatLng? _driverMarkerStartPos;
+  LatLng? _driverMarkerEndPos;
+  LatLng? _driverMarkerAnimatedPos;
+
+  @override
+  void initState() {
+    super.initState();
+    _driverMarkerAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+    _driverMarkerAnimController!.addListener(() {
+      if (mounted) {
+        setState(() {
+          if (_driverMarkerStartPos != null && _driverMarkerEndPos != null) {
+            final t = _driverMarkerAnimController!.value;
+            final lat = _driverMarkerStartPos!.latitude + (_driverMarkerEndPos!.latitude - _driverMarkerStartPos!.latitude) * t;
+            final lng = _driverMarkerStartPos!.longitude + (_driverMarkerEndPos!.longitude - _driverMarkerStartPos!.longitude) * t;
+            _driverMarkerAnimatedPos = LatLng(lat, lng);
+          }
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _driverMarkerAnimController?.dispose();
+    super.dispose();
+  }
   String _getStatusMessage(RideStatus status) {
     switch (status) {
       case RideStatus.requested:
@@ -98,6 +132,26 @@ class _RideInProgressScreenState extends State<RideInProgressScreen> {
           final driver = rideProvider.assignedDriver;
           if (driver != null && driver.location != null) {
             final driverPos = LatLng(driver.location!.latitude, driver.location!.longitude);
+            
+            // --- INICIO ANIMACIÓN DE MOVIMIENTO DE TAXI ---
+            if (_lastDriverId != driver.uid) {
+              _lastDriverId = driver.uid;
+              _driverMarkerStartPos = driverPos;
+              _driverMarkerEndPos = driverPos;
+              _driverMarkerAnimatedPos = driverPos;
+              _driverMarkerAnimController?.stop();
+            }
+
+            if (_driverMarkerEndPos == null) {
+              _driverMarkerStartPos = driverPos;
+              _driverMarkerEndPos = driverPos;
+              _driverMarkerAnimatedPos = driverPos;
+            } else if (_driverMarkerEndPos != driverPos) {
+              _driverMarkerStartPos = _driverMarkerAnimatedPos ?? _driverMarkerEndPos;
+              _driverMarkerEndPos = driverPos;
+              _driverMarkerAnimController!.forward(from: 0.0);
+            }
+            // --- FIN ANIMACIÓN DE MOVIMIENTO DE TAXI ---
             
             if (ride.status == RideStatus.driverOnWay) {
               final distanceMoved = _lastDriverRoutePos != null
@@ -191,6 +245,7 @@ class _RideInProgressScreenState extends State<RideInProgressScreen> {
                 builder: (context, locationProvider, _) {
                   if (locationProvider.currentPosition != null) {
                     return FlutterMap(
+                      mapController: _mapController,
                       options: MapOptions(
                         initialCenter: LatLng(
                           ride.pickupLocation.latitude,
@@ -280,9 +335,30 @@ class _RideInProgressScreenState extends State<RideInProgressScreen> {
               // Botón de Pánico (Solo si el viaje está en curso o conductor en camino)
               if (ride.status == RideStatus.inProgress || ride.status == RideStatus.driverOnWay)
                 const Positioned(
-                  bottom: 350,
+                  bottom: 480,
                   right: 16,
                   child: PanicButtonWidget(role: 'client'),
+                ),
+
+              // Botón para centrar la cámara en el conductor
+              if (driver != null && driver.location != null)
+                Positioned(
+                  bottom: 580,
+                  right: 16,
+                  child: FloatingActionButton(
+                    heroTag: 'center_on_driver',
+                    mini: true,
+                    backgroundColor: AppTheme.surfaceColor,
+                    foregroundColor: AppTheme.primaryColor,
+                    onPressed: () {
+                      final driverPos = LatLng(
+                        driver.location!.latitude,
+                        driver.location!.longitude,
+                      );
+                      _mapController.move(driverPos, 16.0);
+                    },
+                    child: const Icon(Icons.local_taxi),
+                  ),
                 ),
 
               // Bottom sheet con info del viaje
@@ -392,13 +468,39 @@ class _RideInProgressScreenState extends State<RideInProgressScreen> {
 
                       // Botón cancelar
                       if (ride.status == RideStatus.requested ||
-                          ride.status == RideStatus.accepted)
+                          ride.status == RideStatus.accepted ||
+                          ride.status == RideStatus.driverOnWay)
                         SizedBox(
                           width: double.infinity,
                           child: OutlinedButton.icon(
                             onPressed: () {
-                              rideProvider.cancelRide(ride.rideId);
-                              Navigator.pop(context);
+                              showDialog(
+                                context: context,
+                                builder: (context) => AlertDialog(
+                                  backgroundColor: AppTheme.surfaceColor,
+                                  title: const Text('Cancelar Viaje', style: TextStyle(color: AppTheme.textWhite)),
+                                  content: const Text(
+                                    '¿Estás seguro de que deseas cancelar tu solicitud de viaje? Se notificará al conductor.',
+                                    style: TextStyle(color: AppTheme.textGrey),
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context),
+                                      child: const Text('NO', style: TextStyle(color: AppTheme.textGrey)),
+                                    ),
+                                    TextButton(
+                                      onPressed: () async {
+                                        Navigator.pop(context); // Cierra dialog
+                                        await rideProvider.cancelRide(ride.rideId);
+                                        if (context.mounted) {
+                                          Navigator.pop(context); // Vuelve al inicio
+                                        }
+                                      },
+                                      child: const Text('SÍ, CANCELAR', style: TextStyle(color: AppTheme.errorRed, fontWeight: FontWeight.bold)),
+                                    ),
+                                  ],
+                                ),
+                              );
                             },
                             icon: const Icon(Icons.close),
                             label: const Text('CANCELAR VIAJE'),
@@ -461,12 +563,13 @@ class _RideInProgressScreenState extends State<RideInProgressScreen> {
     // Marcador del conductor (si está asignado y tiene ubicación)
     final driver = rideProvider.assignedDriver;
     if (driver != null && driver.location != null) {
+      final markerPos = _driverMarkerAnimatedPos ?? LatLng(
+        driver.location!.latitude,
+        driver.location!.longitude,
+      );
       markers.add(
         Marker(
-          point: LatLng(
-            driver.location!.latitude,
-            driver.location!.longitude,
-          ),
+          point: markerPos,
           width: 40,
           height: 40,
           child: Container(

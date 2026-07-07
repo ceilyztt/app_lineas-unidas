@@ -17,6 +17,7 @@ class AuthProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _error;
   bool _isInitChecked = false;
+  bool _isRegistering = false;
 
   User? get firebaseUser => _firebaseUser;
   UserModel? get userModel => _userModel;
@@ -36,6 +37,9 @@ class AuthProvider extends ChangeNotifier {
       _firebaseUser = user;
       if (user != null) {
         await _loadUserData(user.uid);
+        if (!_isRegistering && (_userModel == null || _userModel?.isDeleted == true || _driverModel?.isDeleted == true)) {
+          await signOut();
+        }
       } else {
         _userModel = null;
         _driverModel = null;
@@ -101,6 +105,7 @@ class AuthProvider extends ChangeNotifier {
     required String phone,
     File? profilePhoto,
   }) async {
+    _isRegistering = true;
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -113,14 +118,14 @@ class AuthProvider extends ChangeNotifier {
         phone: phone,
         profilePhoto: profilePhoto,
       );
-      _isLoading = false;
-      notifyListeners();
       return user != null;
     } catch (e) {
       _error = e.toString();
+      return false;
+    } finally {
+      _isRegistering = false;
       _isLoading = false;
       notifyListeners();
-      return false;
     }
   }
 
@@ -151,6 +156,7 @@ class AuthProvider extends ChangeNotifier {
     String? bankPhone,
     String? bankDni,
   }) async {
+    _isRegistering = true;
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -182,14 +188,14 @@ class AuthProvider extends ChangeNotifier {
         bankPhone: bankPhone,
         bankDni: bankDni,
       );
-      _isLoading = false;
-      notifyListeners();
       return driver != null;
     } catch (e) {
       _error = e.toString();
+      return false;
+    } finally {
+      _isRegistering = false;
       _isLoading = false;
       notifyListeners();
-      return false;
     }
   }
 
@@ -209,6 +215,13 @@ class AuthProvider extends ChangeNotifier {
       );
       if (user != null) {
         await _loadUserData(user.uid);
+        if (_userModel == null || _userModel?.isDeleted == true || _driverModel?.isDeleted == true) {
+          await signOut();
+          _error = 'Esta cuenta ha sido eliminada por la administración o no existe.';
+          _isLoading = false;
+          notifyListeners();
+          return false;
+        }
       }
       _isLoading = false;
       notifyListeners();

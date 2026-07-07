@@ -26,8 +26,8 @@ service cloud.firestore {
     match /users/{userId} {
       // Cualquiera autenticado puede leer datos básicos (para mostrar nombres en el chat/viaje)
       allow read: if isAuth();
-      // Solo el dueño de la cuenta puede crear o modificar su perfil
-      allow write: if isAuth() && request.auth.uid == userId;
+      // Solo el dueño de la cuenta o un administrador pueden crear o modificar su perfil
+      allow write: if isAuth() && (request.auth.uid == userId || isAdmin());
     }
 
     // Colección: Conductores

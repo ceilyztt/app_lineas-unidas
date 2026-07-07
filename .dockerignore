@@ -1,0 +1,31 @@
+# Control de versiones e IDEs
+.git/
+.gitignore
+.gitattributes
+.idea/
+.vscode/
+*.iml
+*.metadata
+
+# Cache y archivos temporales de Dart / Flutter
+.dart_tool/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+
+# Carpetas de plataformas nativas móviles (no se necesitan para la Web)
+android/
+ios/
+
+# Pruebas unitarias e imágenes locales
+test/
+/log_utf8.txt
+/extracted.txt
+/recovered.dart
+/recover.dart
+
+# Archivos de configuración local de Firebase
+*local.properties
+*.keystore
+*.jks

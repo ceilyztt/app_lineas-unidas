@@ -43,7 +43,10 @@ class DriversDirectoryScreen extends StatelessWidget {
           if (snapshot.hasError) return const Center(child: Text('Error al cargar datos', style: TextStyle(color: Colors.white)));
           if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
 
-          final docs = snapshot.data!.docs;
+          final docs = snapshot.data!.docs.where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            return data['isDeleted'] != true;
+          }).toList();
 
           if (docs.isEmpty) {
             return const Center(child: Text('No hay conductores aprobados', style: TextStyle(color: Colors.white, fontSize: 18)));

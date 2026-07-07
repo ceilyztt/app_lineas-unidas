@@ -195,7 +195,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
 
         final docs = snapshot.data!.docs.where((doc) {
           final data = doc.data() as Map<String, dynamic>;
-          return data['isRejected'] != true;
+          return data['isRejected'] != true && data['isDeleted'] != true;
         }).toList();
 
         if (docs.isEmpty) {
@@ -261,7 +261,10 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         if (snapshot.hasError) return const Center(child: Text('Error al cargar datos', style: TextStyle(color: Colors.white)));
         if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
 
-        final docs = snapshot.data!.docs;
+        final docs = snapshot.data!.docs.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          return data['isDeleted'] != true;
+        }).toList();
 
         if (docs.isEmpty) {
           return const Center(child: Text('No hay conductores activos', style: TextStyle(color: Colors.white, fontSize: 18)));
@@ -363,26 +366,45 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                     ),
                   ),
                   isThreeLine: true,
-                  trailing: Container(
-                    decoration: BoxDecoration(
-                      color: isSuspended 
-                          ? AppTheme.successGreen.withValues(alpha: 0.1) 
-                          : AppTheme.errorRed.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      icon: Icon(
-                        isSuspended ? Icons.check_circle_outline : Icons.block,
-                        color: isSuspended ? AppTheme.successGreen : AppTheme.errorRed,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(
+                          color: isSuspended 
+                              ? AppTheme.successGreen.withValues(alpha: 0.1) 
+                              : AppTheme.errorRed.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          icon: Icon(
+                            isSuspended ? Icons.check_circle_outline : Icons.block,
+                            color: isSuspended ? AppTheme.successGreen : AppTheme.errorRed,
+                          ),
+                          onPressed: () {
+                            if (isSuspended) {
+                              _reactivarConductor(context, docId);
+                            } else {
+                              _suspenderConductor(context, docId);
+                            }
+                          },
+                        ),
                       ),
-                      onPressed: () {
-                        if (isSuspended) {
-                          _reactivarConductor(context, docId);
-                        } else {
-                          _suspenderConductor(context, docId);
-                        }
-                      },
-                    ),
+                      const SizedBox(width: 8),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: AppTheme.errorRed.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          icon: const Icon(
+                            Icons.delete_forever,
+                            color: AppTheme.errorRed,
+                          ),
+                          onPressed: () => _eliminarConductor(context, docId),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -838,6 +860,103 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         content: Text('Conductor reactivado con éxito.', style: TextStyle(color: Colors.white)),
         backgroundColor: AppTheme.successGreen,
       ),
+    );
+  }
+
+  Future<void> _eliminarConductor(BuildContext context, String docId) async {
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: AppTheme.backgroundColor,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text(
+            'Eliminar Conductor',
+            style: TextStyle(color: AppTheme.errorRed, fontWeight: FontWeight.bold),
+          ),
+          content: const Text(
+            '¿Estás seguro de que deseas eliminar permanentemente a este conductor?\n\nEsta acción impedirá que acceda al sistema y no se puede deshacer.',
+            style: TextStyle(color: AppTheme.textWhite, fontSize: 14),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('CANCELAR', style: TextStyle(color: AppTheme.textGrey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.errorRed),
+              onPressed: () async {
+                // 1. Validar que no tenga un viaje activo
+                try {
+                  final activeRidesQuery = await FirebaseFirestore.instance
+                      .collection('rides')
+                      .where('driverId', isEqualTo: docId)
+                      .where('status', whereIn: ['accepted', 'driverOnWay', 'inProgress', 'completed'])
+                      .get();
+
+                  final hasActiveRide = activeRidesQuery.docs.any((doc) {
+                    final rideData = doc.data();
+                    final status = rideData['status'] as String?;
+                    final paymentStatus = rideData['paymentStatus'] as String?;
+                    return status != 'completed' || paymentStatus != 'confirmed';
+                  });
+
+                  if (hasActiveRide) {
+                    if (dialogContext.mounted) {
+                      Navigator.pop(dialogContext);
+                    }
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('No se puede eliminar un conductor con un viaje activo en curso.', style: TextStyle(color: Colors.white)),
+                          backgroundColor: AppTheme.errorRed,
+                        ),
+                      );
+                    }
+                    return;
+                  }
+
+                  // 2. Eliminar definitivamente de Firestore
+                  await FirebaseFirestore.instance.collection('drivers').doc(docId).delete();
+
+                  try {
+                    await FirebaseFirestore.instance.collection('users').doc(docId).delete();
+                  } catch (userErr) {
+                    debugPrint('Warning: Could not delete users collection during hard delete: $userErr');
+                  }
+
+                  if (dialogContext.mounted) {
+                    Navigator.pop(dialogContext);
+                  }
+
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Conductor eliminado con éxito.', style: TextStyle(color: Colors.white)),
+                        backgroundColor: AppTheme.errorRed,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (dialogContext.mounted) {
+                    Navigator.pop(dialogContext);
+                  }
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error al eliminar conductor: $e', style: const TextStyle(color: Colors.white)),
+                        backgroundColor: AppTheme.errorRed,
+                      ),
+                    );
+                  }
+                }
+              },
+              child: const Text('ELIMINAR', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
     );
   }
 }

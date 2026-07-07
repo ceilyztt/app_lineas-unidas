@@ -13,6 +13,7 @@ class DriverProvider extends ChangeNotifier {
   bool _isLoading = false;
   StreamSubscription? _driverSubscription;
   StreamSubscription? _activeRidesSubscription;
+  bool _isInitialized = false;
 
   List<RideModel> _previousActiveRides = [];
 
@@ -20,11 +21,14 @@ class DriverProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isAvailable => _driver?.isAvailable ?? false;
   bool get isApproved => _driver?.isApproved ?? false;
+  bool get isInitialized => _isInitialized;
 
   void loadDriver(String uid) {
+    _isInitialized = false;
     _driverSubscription?.cancel();
     _driverSubscription = _firestoreService.streamDriver(uid).listen((driver) {
       _driver = driver;
+      _isInitialized = true;
       notifyListeners();
     });
 
@@ -60,6 +64,7 @@ class DriverProvider extends ChangeNotifier {
     _activeRidesSubscription?.cancel();
     _driver = null;
     _previousActiveRides = [];
+    _isInitialized = false;
     notifyListeners();
   }
 

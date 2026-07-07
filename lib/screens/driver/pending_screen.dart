@@ -31,6 +31,11 @@ class DriverPendingScreen extends StatelessWidget {
             final data = snapshot.data!.data() as Map<String, dynamic>?;
             final isApproved = data?['isApproved'] ?? false;
             final isRejected = data?['isRejected'] ?? false;
+            final isDeleted = data?['isDeleted'] ?? false;
+
+            if (isDeleted == true) {
+              return _buildDeletedUI(context);
+            }
 
             if (isApproved == true) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -119,6 +124,41 @@ class DriverPendingScreen extends StatelessWidget {
               onPressed: () async {
                 await Provider.of<AuthProvider>(context, listen: false).signOut();
                 if (context.mounted) Navigator.pushReplacementNamed(context, AppRoutes.login);
+              },
+              child: const Text('Cerrar Sesión', style: TextStyle(color: Colors.white)),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDeletedUI(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(32.0),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.delete_forever, size: 80, color: AppTheme.errorRed),
+            const SizedBox(height: 24),
+            const Text(
+              'CUENTA ELIMINADA', 
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Tu cuenta de conductor ha sido eliminada por la administración.\n\nSi crees que esto es un error, comunícate con la oficina de Líneas Unidas.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppTheme.textGrey, fontSize: 16, height: 1.5),
+            ),
+            const SizedBox(height: 48),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.surfaceColor),
+              onPressed: () async {
+                await Provider.of<AuthProvider>(context, listen: false).signOut();
+                if (context.mounted) Navigator.pushNamedAndRemoveUntil(context, AppRoutes.login, (r) => false);
               },
               child: const Text('Cerrar Sesión', style: TextStyle(color: Colors.white)),
             )

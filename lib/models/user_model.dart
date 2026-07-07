@@ -8,6 +8,7 @@ class UserModel {
   final String role; // 'client' o 'driver'
   final String? photoUrl;
   final DateTime createdAt;
+  final bool isDeleted;
 
   UserModel({
     required this.uid,
@@ -17,6 +18,7 @@ class UserModel {
     required this.role,
     this.photoUrl,
     required this.createdAt,
+    this.isDeleted = false,
   });
 
   Map<String, dynamic> toMap() {
@@ -28,6 +30,7 @@ class UserModel {
       'role': role,
       'photoUrl': photoUrl,
       'createdAt': Timestamp.fromDate(createdAt),
+      'isDeleted': isDeleted,
     };
   }
 
@@ -40,6 +43,7 @@ class UserModel {
       role: map['role'] ?? 'client',
       photoUrl: map['photoUrl'],
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      isDeleted: map['isDeleted'] ?? false,
     );
   }
 
@@ -51,6 +55,7 @@ class UserModel {
     String? role,
     String? photoUrl,
     DateTime? createdAt,
+    bool? isDeleted,
   }) {
     return UserModel(
       uid: uid ?? this.uid,
@@ -60,6 +65,7 @@ class UserModel {
       role: role ?? this.role,
       photoUrl: photoUrl ?? this.photoUrl,
       createdAt: createdAt ?? this.createdAt,
+      isDeleted: isDeleted ?? this.isDeleted,
     );
   }
 }

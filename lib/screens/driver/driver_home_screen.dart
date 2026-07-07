@@ -118,6 +118,91 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     final locationProvider = Provider.of<LocationProvider>(context);
     final driver = driverProvider.driver;
 
+    if (driver == null && driverProvider.isInitialized) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await authProvider.signOut();
+        if (context.mounted) {
+          Navigator.pushNamedAndRemoveUntil(context, AppRoutes.login, (r) => false);
+        }
+      });
+      return const Scaffold(
+        backgroundColor: AppTheme.backgroundColor,
+        body: Center(
+          child: CircularProgressIndicator(
+            color: AppTheme.primaryColor,
+          ),
+        ),
+      );
+    }
+
+    if (driver != null && driver.isDeleted) {
+      if (locationProvider.isTracking) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          locationProvider.stopTracking();
+        });
+      }
+      return Scaffold(
+        backgroundColor: AppTheme.backgroundColor,
+        body: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.delete_forever,
+                  size: 80,
+                  color: AppTheme.errorRed,
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'CUENTA ELIMINADA',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: AppTheme.textWhite,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Tu cuenta de conductor ha sido eliminada por la administración.\n\nSi crees que esto es un error, comunícate con la oficina de Líneas Unidas.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: AppTheme.textGrey,
+                    fontSize: 16,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 48),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.surfaceColor,
+                    foregroundColor: AppTheme.textWhite,
+                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: () async {
+                    await authProvider.signOut();
+                    if (context.mounted) {
+                      Navigator.pushNamedAndRemoveUntil(context, AppRoutes.login, (r) => false);
+                    }
+                  },
+                  child: const Text(
+                    'Cerrar Sesión',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                )
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     if (driver != null && driver.isSuspended) {
       if (locationProvider.isTracking) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1183,6 +1268,46 @@ class ActiveRideCard extends StatelessWidget {
     );
   }
 
+  void _cancelRide(BuildContext context, RideProvider rideProvider, String rideId) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppTheme.surfaceColor,
+          title: const Text('Cancelar Viaje', style: TextStyle(color: AppTheme.textWhite)),
+          content: const Text(
+            '¿Estás seguro de que deseas cancelar este viaje? Se le notificará al cliente.',
+            style: TextStyle(color: AppTheme.textGrey),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('NO', style: TextStyle(color: AppTheme.textGrey)),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                await rideProvider.cancelRide(rideId);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('El viaje ha sido cancelado.'),
+                      backgroundColor: AppTheme.errorRed,
+                    ),
+                  );
+                }
+              },
+              child: const Text(
+                'SÍ, CANCELAR',
+                style: TextStyle(color: AppTheme.errorRed, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildDetailText(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
@@ -1547,6 +1672,22 @@ class ActiveRideCard extends StatelessWidget {
                   child: const Text('FINALIZAR VIAJE'),
                 ),
               ),
+            if (ride.status == RideStatus.accepted || ride.status == RideStatus.driverOnWay) ...[
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => _cancelRide(context, rideProvider, ride.rideId),
+                  icon: const Icon(Icons.close),
+                  label: const Text('CANCELAR VIAJE'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.errorRed,
+                    side: const BorderSide(color: AppTheme.errorRed),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
